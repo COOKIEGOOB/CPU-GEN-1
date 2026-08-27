@@ -1,0 +1,24 @@
+# simulation / debug artifacts (keep the repo free of waveform & log dumps)
+simv*
+csrc/
+*.log
+*.key
+DVEfiles/
+verdiLog/
+vivado_syn_output/
+*.vcd
+*.vpd
+*.fsdb
+*.fsdb.*
+*.svf
+novas.*
+novas_*
+session.tcl
+ucli.key
+*.conf
+*.rc
+*.daidir
+parser.out
+parsetab.py
+preprocess.output
+pp.out

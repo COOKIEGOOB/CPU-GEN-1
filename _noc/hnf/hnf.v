@@ -356,6 +356,14 @@ module hnf `HNF_PARAM
     wire [`MSHR_ENTRIES_WIDTH-1:0]              pipe_dbf_rd_idx_sx2_q;
 
     //modification
+    // Optional timing stages (see hnf_bump.v).
+    //   - ADD_PIPE_STAGE = 0 (default): pure wires, zero latency.
+    //   - ADD_PIPE_STAGE = 1: inserts one register per path (+1 cycle).
+    //     Enable per instance, e.g.
+    //       hnf_bump #(.DATA_WIDTH(`LOC_INDEX_WIDTH), .ADD_PIPE_STAGE(1)) ...
+    //     Only enable a stage where a synthesis/timing report actually
+    //     requires it; every enabled stage adds one cycle of latency on
+    //     the L3 <-> DBF <-> mem_ctl data/control path.
     wire [`CACHE_LINE_WIDTH-1:0]                l3_rd_data_q_bump1out;
     wire [`CACHE_LINE_WIDTH-1:0]                l3_rd_data_q_bump2out;
     wire [`CACHE_LINE_WIDTH-1:0]                dbf_l3_wr_data_q_bump3out;
@@ -907,7 +915,7 @@ module hnf `HNF_PARAM
                     .cpl_lru_wr_data_q                            (cpl_lru_wr_data_q                 )
                 );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`CACHE_LINE_WIDTH), .ADD_PIPE_STAGE(0)) //modification
                   tx_l3tobuffer(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -918,7 +926,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (l3_rd_data_q_bump1out             )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`CACHE_LINE_WIDTH), .ADD_PIPE_STAGE(0)) //modification
                   rx_l3tobuffer(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -929,7 +937,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (l3_rd_data_q_bump2out             )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`CACHE_LINE_WIDTH), .ADD_PIPE_STAGE(0)) //modification
                   tx_buffertomem(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -940,7 +948,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (dbf_l3_wr_data_q_bump3out         )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`CACHE_LINE_WIDTH), .ADD_PIPE_STAGE(0)) //modification
                   rx_buffertomem(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -951,7 +959,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (dbf_l3_wr_data_q_bump4out         )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`LOC_INDEX_WIDTH), .ADD_PIPE_STAGE(0)) //modification
                   tx_pipelinetomem_index(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -962,7 +970,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (cpl_l3_index_q_bump5out           )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`LOC_WAY_NUM), .ADD_PIPE_STAGE(0)) //modification
                     tx_pipelinetomem_rd_ways(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -973,7 +981,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (cpl_l3_rd_ways_q_bump5out         )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`LOC_WAY_NUM), .ADD_PIPE_STAGE(0)) //modification
                   tx_pipelinetomem_wr_ways(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -984,7 +992,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (cpl_l3_wr_ways_q_bump5out         )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`LOC_INDEX_WIDTH), .ADD_PIPE_STAGE(0)) //modification
                   rx_pipelinetomem_index(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -995,7 +1003,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (cpl_l3_index_q_bump6out           )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`LOC_WAY_NUM), .ADD_PIPE_STAGE(0)) //modification
                   rx_pipelinetomem_rd_ways(
                       //inputs
                       .clk                                          (CLK                               ),
@@ -1006,7 +1014,7 @@ module hnf `HNF_PARAM
                       .data_out                                     (cpl_l3_rd_ways_q_bump6out         )
                   );
 
-    hnf_bump `HNF_PARAM_INST //modification
+    hnf_bump #(.DATA_WIDTH(`LOC_WAY_NUM), .ADD_PIPE_STAGE(0)) //modification
                   rx_pipelinetomem_wr_ways(
                       //inputs
                       .clk                                          (CLK                               ),
