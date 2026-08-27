@@ -11,6 +11,7 @@
 ./tb/tb_hnf.sv
 ./misc/hnf_biq.v
 ./misc/assert_checker.sv
+./misc/chi_ultra_telemetry_fabric.v
 ./misc/poll_function.v
 ./misc/sync_fifo.v
 ./misc/poll_with_start_entry.v

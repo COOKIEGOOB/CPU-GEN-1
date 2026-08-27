@@ -71,7 +71,23 @@ iverilog-hni:
 	    hni/hni_txdat.v hni/hni_txrsp.v hni/hni_mshr.v hni/hni_qos.v \
 	    hni/hni_data_buffer.v hni/hni_global_monitor.v
 
+# Fully expanded 256-lane CHI observability fabric.
+generate-ultra:
+	../tools/generate_chi_ultra_telemetry.py
+
+check-ultra-generated:
+	@cp misc/chi_ultra_telemetry_fabric.v /tmp/chi_ultra_telemetry_fabric.v
+	@../tools/generate_chi_ultra_telemetry.py >/dev/null
+	@cmp /tmp/chi_ultra_telemetry_fabric.v misc/chi_ultra_telemetry_fabric.v
+	@rm -f /tmp/chi_ultra_telemetry_fabric.v
+
+iverilog-ultra:
+	$(IV) -g2012 -Wall -s tb_chi_ultra_telemetry -o /tmp/tb_chi_ultra_telemetry \
+	    -f file_list_ultra.f
+	vvp /tmp/tb_chi_ultra_telemetry
+
 clean:
 	rm -rf csrc *.vpd *.fsdb *.daidir *.log simv* *.key DVEfiles vivado_syn_output *.conf *.rc verdiLog
 
-.PHONY: com sim run_dve iverilog-hnf iverilog-snf iverilog-hni clean
+.PHONY: com sim run_dve iverilog-hnf iverilog-snf iverilog-hni \
+        generate-ultra check-ultra-generated iverilog-ultra clean
