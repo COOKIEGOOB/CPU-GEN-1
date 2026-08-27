@@ -89,7 +89,7 @@ The upstream datapath is clean on the happy path; the levers are:
    touches). 32 B/cyc already matches AMD's 32 B/cyc per-core L3 read
    interface, so the slice is at parity per core; scale with more HNF slices
    (VCACHE_NOTES.md §5.2).
-3. **Outstanding capacity:** `HNF_MSHR_ENTRIES_NUM_PARAM` (now **64 default**,
+3. **Outstanding capacity:** `HNF_MSHR_ENTRIES_NUM_PARAM` (now **128 default**,
    was 32) and the QoS pool split (`QOS_*_POOL_NUM` in `include/hnf_defines.v`,
    auto-scaled to 4/12/16/31) bound in-flight coherent traffic for 4 RNFs;
    shortfalls show up as RetryAck storms (check `retry_ack_fifo` activity in

@@ -19,19 +19,17 @@
 // ============================================================================
 // V-Cache sizing defaults (see _noc/VCACHE_NOTES.md for the full analysis)
 // ----------------------------------------------------------------------------
-// These defaults target an AMD-EPYC-V-Cache-class L3 slice:
-//   * 16-way associativity        (matches Zen4/Zen5 L3: 16-way)
-//   * 16 MB per HNF slice         (4x the original 4 MB; with the 4-RNF
-//                                  default, per-RNF capacity is 4 MB, matching
-//                                  the 4 MB/core baseline of a 32 MB/CCD CCD)
-//   * MSHR 64                     (2x in-flight miss capacity; the QOS pools
-//                                  auto-scale via the non-32 branch in
-//                                  hnf_defines.v)
-//   * Snoop filter 524288 entries (2x the 262144 L3 lines at 16 MB, so the SF
-//                                  never undersizes the cache)
-// HNF_L3_CACHE_SIZE_PARAM is in KiB. The testbenches pass their own explicit
-// parameter values, so the regression (4 MB / 32 MSHR / 131072 SF) is
-// unaffected by these defaults.
+// These defaults are the repository's 32 MiB-per-slice high-capacity profile (3 slices = 96 MiB):
+//   * 16-way associativity         (same geometry class as Zen 4/Zen 5 L3)
+//   * 32 MiB per HNF slice               (base plus stacked-capacity class)
+//   * 128 MSHRs                    (enough miss-level parallelism to feed the
+//                                   larger array; QoS pools scale algebraically)
+//   * 1,048,576 snoop-filter slots (2x the 524,288 cache-line population)
+// HNF_L3_CACHE_SIZE_PARAM is in KiB. Testbenches pin the compact 4 MiB / 32
+// MSHR / 131072-SF profile, avoiding a 32 MiB behavioral allocation in CI.
+// This is an RTL capacity/throughput profile, not a claim of AMD equivalence:
+// hybrid bonding, SRAM density, clock rate, power, and package thermals are
+// physical implementation properties that must be established after PPA.
 // ============================================================================
 `define HNF_PARAM #( \
      parameter CHIE_REQ_ADDR_WIDTH_PARAM    = 44,    \
@@ -50,13 +48,13 @@
      parameter HNF_NID_PARAM                = 0,     \
      parameter SNF_NID_PARAM                = 32,     \
      parameter XP_LCRD_NUM_PARAM            = 15,    \
-     parameter HNF_SF_ENTRIES_NUM_PARAM     = 524288,\
+     parameter HNF_SF_ENTRIES_NUM_PARAM     = 1048576,\
      parameter HNF_SF_WAY_NUM_PARAM         = 16,    \
      parameter HNF_MSHR_EXCL_RN_NUM_PARAM   = 32,    \
      parameter HNF_MSHR_EXCL_RN_WIDTH_PARAM = 5,     \
-     parameter HNF_MSHR_ENTRIES_NUM_PARAM   = 64,    \
-     parameter HNF_MSHR_ENTRIES_WIDTH_PARAM = 6,     \
-     parameter HNF_L3_CACHE_SIZE_PARAM      = 16384, \
+     parameter HNF_MSHR_ENTRIES_NUM_PARAM   = 128,   \
+     parameter HNF_MSHR_ENTRIES_WIDTH_PARAM = 7,     \
+     parameter HNF_L3_CACHE_SIZE_PARAM      = 32768, \
      parameter HNF_L3_WAY_NUM_PARAM         = 16     )
 
 `define HNF_PARAM_INST #( \

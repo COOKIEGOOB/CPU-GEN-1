@@ -150,11 +150,15 @@
 `define QOS_MED_MIN                        8
 `define QOS_LOW_MAX                        7
 `define QOS_LOW_MIN                        0
-`define QOS_POOL_CNT_WIDTH                 ((HNF_MSHR_ENTRIES_NUM_PARAM == 32)? 4 : 5)
-`define QOS_HHIGH_POOL_NUM                 ((HNF_MSHR_ENTRIES_NUM_PARAM == 32)? 2 : 4)
-`define QOS_HIGH_POOL_NUM                  ((HNF_MSHR_ENTRIES_NUM_PARAM == 32)? 6 : 12)
-`define QOS_MED_POOL_NUM                   ((HNF_MSHR_ENTRIES_NUM_PARAM == 32)? 8 : 16)
-`define QOS_LOW_POOL_NUM                   ((HNF_MSHR_ENTRIES_NUM_PARAM == 32)? 15 : 31)
+// Reserve one MSHR for sequential/protocol progress and divide the remainder
+// 1/16 : 3/16 : 4/16 : residual. Unlike the old 32/64-only ternaries, these
+// expressions preserve every entry at 128+ MSHRs and retain the exact legacy
+// 32-entry split (2/6/8/15).
+`define QOS_POOL_CNT_WIDTH                 $clog2(HNF_MSHR_ENTRIES_NUM_PARAM+1)
+`define QOS_HHIGH_POOL_NUM                 (HNF_MSHR_ENTRIES_NUM_PARAM/16)
+`define QOS_HIGH_POOL_NUM                  ((HNF_MSHR_ENTRIES_NUM_PARAM*3)/16)
+`define QOS_MED_POOL_NUM                   (HNF_MSHR_ENTRIES_NUM_PARAM/4)
+`define QOS_LOW_POOL_NUM                   (HNF_MSHR_ENTRIES_NUM_PARAM-1-`QOS_HHIGH_POOL_NUM-`QOS_HIGH_POOL_NUM-`QOS_MED_POOL_NUM)
 `define RET_BANK_CNT_WIDTH                 10
 `define RET_BANK_ENTRIES_NUM               `RN_NUM
 `define RET_BANK_ENTRIES_WIDTH             ((`RET_BANK_ENTRIES_NUM == 1)? 1 : $clog2(`RET_BANK_ENTRIES_NUM))

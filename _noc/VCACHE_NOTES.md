@@ -40,12 +40,12 @@ Geometry (default before this pass → after):
 
 | Item | Before | After (this pass) |
 |---|---|---|
-| `HNF_L3_CACHE_SIZE_PARAM` (KiB) | 4096 (4 MB) | **16384 (16 MB)** |
+| `HNF_L3_CACHE_SIZE_PARAM` (KiB) | 4096 (4 MB) | **32768 (32 MiB per slice)** |
 | `HNF_L3_WAY_NUM_PARAM` | 16 | 16 (matches Zen 4/5 16-way) |
-| Sets / index / tag | 4096 / 12 / 26 b | 16384 / 14 / 24 b |
-| Lines per slice | 65 536 | 262 144 |
-| `HNF_MSHR_ENTRIES_NUM_PARAM` | 32 | **64** (QOS pools auto-scale: HHIGH 4 / HIGH 12 / MED 16 / LOW 31) |
-| `HNF_SF_ENTRIES_NUM_PARAM` | 131 072 (2× lines) | **524 288 (2× lines at 16 MB)** |
+| Sets / index / tag | 4096 / 12 / 26 b | 32768 / 15 / 23 b |
+| Lines per slice | 65 536 | 524 288 |
+| `HNF_MSHR_ENTRIES_NUM_PARAM` | 32 | **128** (QoS pools: HHIGH 8 / HIGH 24 / MED 32 / LOW 63) |
+| `HNF_SF_ENTRIES_NUM_PARAM` | 131 072 (2× lines) | **1 048 576 (2× lines at 32 MiB)** |
 | Replacement policy | DRrip (2-bit RRPV/way, `hnf_lru_sram` 32 b) | unchanged |
 | DAT channel | 32 B/cyc (256 b flit, 2 flits/line) | unchanged — **matches AMD's 32 B/cyc per-core L3 read interface** |
 
@@ -68,17 +68,17 @@ Hit latency: ≈ 10–12 cycles REQ-accept → CompData (HNF-internal)
 
 Rationale per knob (see the header comment there):
 
-- **16 MB slice** — 4× capacity. With the default 4-RNF configuration that is
-  4 MB per RN, the same per-core baseline as AMD's 32 MB/8-core CCD. The
+- **32 MiB slice** — 8× capacity; three interleaved slices provide 96 MiB aggregate. With the default 4-RNF configuration that is
+  8 MiB per RN per slice; systems can interleave three slices for capacity and bandwidth. The
   whole point of a V-Cache is *fewer DRAM round trips*; this is the knob that
-  delivers that. Cost: one-time reset init grows 4096 → 16384 cycles
+  delivers that. Cost: one-time reset init grows 4096 → 32768 sets (15-bit index)
   (tag+LRU sweep, `hnf_mem_ctl`, still parallel with the SF sweep).
-- **MSHR 32 → 64** — 2× in-flight misses. A big cache only pays off if misses
+- **MSHR 32 → 128** — 4× in-flight misses. A big cache only pays off if misses
   can be serviced in parallel; 32 MSHRs across 4 RNs saturates under
   multi-RN stream traffic (the "MSHR-32 saturation" item in PERF_NOTES §4 is
   resolved at default config). QOS pool sizes come from the existing
-  non-32 branch in `hnf_defines.v`; no RTL change needed.
-- **SF 131 072 → 524 288** — keeps the snoop filter at 2× the L3 line count.
+  generalized formulas in `hnf_defines.v`; all 127 allocatable entries are assigned.
+- **SF 131 072 → 1 048 576** — keeps the snoop filter at 2× the L3 line count.
   Undersizing the SF (the old 131 072 vs 262 144 lines) would thrash the SF
   and turn clean evictions into broadcast snoops — a direct bandwidth loss.
 - **What was deliberately NOT changed:**
@@ -201,3 +201,18 @@ which pins its own values) is unaffected unless you override.
 5. Wikipedia — Zen 4 / Zen 5 (32 MB/CCD, 16-way, 32 B/cyc read + 16 B/cyc write per core; Zen 5 L3 latency −3.5 cyc; V-Cache under core, 32+64 MB).
 6. videocardz — EPYC L3 32 MB per chiplet across generations.
 7. wccftech / driverscloud — Genoa-X per-CCD 32 MB base + 64 MB 3D V-Cache.
+
+## 6. 32 MiB slice / 96 MiB aggregate profile (August 2026)
+
+The repository default now selects a 32 MiB power-of-two slice, 128 MSHRs,
+and a 1,048,576-entry snoop filter. Three address-interleaved slices provide
+a 96 MiB aggregate while retaining power-of-two set indexing. QoS pools are no longer hard-coded for only 32 or 64 entries;
+they scale for any power-of-two MSHR count and reserve one progress entry. At
+128 entries the split is 8/24/32/63 plus one sequential-progress entry.
+
+This profile gives each slice robust capacity and outstanding-request resources;
+a three-slice system is in the 96 MiB aggregate capacity class. It does **not** turn generic RTL
+into AMD 3D V-Cache: hybrid-bonded SRAM, TSV/interconnect parasitics, process
+technology, ECC policy, frequency, thermals, yield, and measured PPA remain
+physical-design and verification deliverables. The compact testbench profile
+continues to pin 4 MiB explicitly for practical simulation.
