@@ -1,0 +1,305 @@
+==============================================================================
+VCACHE-3D  --  static timing model  (pre-PnR analytical signoff)
+==============================================================================
+Base tier target   : 3.00 GHz  (period 333.3 ps)
+Cache tier target  : 1.50 GHz  (period 666.7 ps)
+Corner             : SS, 0.855 V logic / 0.68 V array, 125 C
+Wire model         : buffered M4 0.22 ps/um, M8 0.09 ps/um
+Bond model         : 9 um hybrid bond pad, ~2.4 fF, 31 ps round trip
+
+  Path: router S0: req flop -> even/odd popcount -> S0 flop   [base tier]
+    clk->Q                                     26.0 ps
+    42-bit split popcount (carry-save, 6 levels)    108.0 ps
+    sum registers                              18.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   203.0 ps
+    required (period)                         333.3 ps
+    SLACK                                    +130.3 ps  MET
+
+  Path: router S1: S0 flop -> even+2*odd -> two mod-3 folds -> S1 flop   [base tier]
+    clk->Q                                     26.0 ps
+    7-bit add                                  54.0 ps
+    mod-3 fold x2                             108.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   239.0 ps
+    required (period)                         333.3 ps
+    SLACK                                     +94.3 ps  MET
+
+  Path: router S2: S1 flop -> final fold -> slice select -> FIFO write   [base tier]
+    clk->Q                                     26.0 ps
+    final fold + conditional subtract          72.0 ps
+    slice select decode                        54.0 ps
+    FIFO write port                            18.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   221.0 ps
+    required (period)                         333.3 ps
+    SLACK                                    +112.3 ps  MET
+
+  Path: router S3: FIFO -> request register -> 1.8 mm wire -> slice flop   [base tier]
+    clk->Q                                     26.0 ps
+    FIFO read mux (8 entries)                  54.0 ps
+    slice enable remap                         36.0 ps
+    wire across the slice pitch (1800 um, M8)    162.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   329.0 ps
+    required (period)                         333.3 ps
+    SLACK                                      +4.3 ps  MET
+
+  Path: tag address: req flop -> set hash -> bank decode -> tag macro A   [base tier]
+    clk->Q                                     26.0 ps
+    set index bank split                       18.0 ps
+    4-bank decode                              36.0 ps
+    wire to tag macros (450 um, M8)            40.5 ps
+    macro address setup                        45.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   216.5 ps
+    required (period)                         333.3 ps
+    SLACK                                    +116.8 ps  MET
+
+  Path: tag read: tag macro (8192x39, banked) -> bank mux -> tag flop   [base tier]
+    clk->Q                                     26.0 ps
+    macro HP_SPSRAM_8192X39 clk->Q (SS)       149.0 ps
+    4:1 bank mux                               36.0 ps
+    wire to compare stage (300 um, M4)         66.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   328.0 ps
+    required (period)                         333.3 ps
+    SLACK                                      +5.3 ps  MET
+
+  Path: tag compare: tag flop -> 16-way raw compare -> hit encode -> hit flop   [base tier]
+    clk->Q                                     26.0 ps
+    16 x 27-bit compare (XOR tree + reduce)    121.5 ps
+    hit one-hot -> way encode                  72.0 ps
+    hit/miss qualification                     18.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   288.5 ps
+    required (period)                         333.3 ps
+    SLACK                                     +44.8 ps  MET
+
+  Path: tag ECC (parallel): tag flop -> SECDED(32,7) syndrome -> flag flop   [base tier]
+    clk->Q                                     26.0 ps
+    syndrome XOR tree (max row load 16)        82.8 ps
+    nz / parity reduce                         36.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   195.8 ps
+    required (period)                         333.3 ps
+    SLACK                                    +137.5 ps  MET
+
+  Path: victim select: tag flop -> RRPV max reduce -> victim flop   [base tier]
+    clk->Q                                     26.0 ps
+    16-way RRPV max reduce (2 b)              118.8 ps
+    invalid-way priority encode                72.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   267.8 ps
+    required (period)                         333.3 ps
+    SLACK                                     +65.5 ps  MET
+
+  Path: base data address: way/set flop -> bank decode -> data macro A   [base tier]
+    clk->Q                                     26.0 ps
+    way decode + bank decode                   72.0 ps
+    wire to data macros (700 um, M8)           63.0 ps
+    macro address setup                        45.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   257.0 ps
+    required (period)                         333.3 ps
+    SLACK                                     +76.3 ps  MET
+
+  Path: base data read A: data macro (8192x576, banked) -> macro out flop   [base tier]
+    clk->Q                                     26.0 ps
+    macro HP_SPSRAM_8192X576 clk->Q (SS)      164.0 ps
+    OUT_REG capture                            18.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   259.0 ps
+    required (period)                         333.3 ps
+    SLACK                                     +74.3 ps  MET
+
+  Path: base data read B: macro out flop -> bank mux -> way mux -> ECC flop   [base tier]
+    clk->Q                                     26.0 ps
+    4:1 bank mux (576 b)                       36.0 ps
+    4:1 way mux (576 b)                        36.0 ps
+    wire to ECC stage (600 um, M8)             54.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   203.0 ps
+    required (period)                         333.3 ps
+    SLACK                                    +130.3 ps  MET
+
+  Path: ECC stage 1: data flop -> 4x SECDED(128,9) syndrome -> syndrome flop   [base tier]
+    clk->Q                                     26.0 ps
+    syndrome XOR tree, max row load 57        124.2 ps
+    syndrome pack                              18.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   219.2 ps
+    required (period)                         333.3 ps
+    SLACK                                    +114.1 ps  MET
+
+  Path: ECC stage 2: syndrome flop -> 1-of-128 compare -> correct -> rsp flop   [base tier]
+    clk->Q                                     26.0 ps
+    syndrome == column compare (9 b, 128 wide)     36.0 ps
+    correction XOR                             18.0 ps
+    poison / CE / UE merge                     36.0 ps
+    wire to response flop (400 um, M4)         88.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   255.0 ps
+    required (period)                         333.3 ps
+    SLACK                                     +78.3 ps  MET
+
+  Path: bond TX A: payload flop -> CRC16 -> beat register   [base tier]
+    clk->Q                                     26.0 ps
+    CRC-16 over 148 b (unrolled, depth 8)     144.0 ps
+    beat register setup path                   18.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   239.0 ps
+    required (period)                         333.3 ps
+    SLACK                                     +94.3 ps  MET
+
+  Path: bond TX B: beat flop -> lane steering -> 900 um wire -> pad   [base tier]
+    clk->Q                                     26.0 ps
+    logical->physical lane steering (2:1 per lane after solve)     36.0 ps
+    wire to the bond field (900 um, M8)        81.0 ps
+    pad driver + ESD                           45.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   239.0 ps
+    required (period)                         333.3 ps
+    SLACK                                     +94.3 ps  MET
+
+  Path: scrub/BISR maintenance: state flop -> address gen -> port arb -> flop   [base tier]
+    clk->Q                                     26.0 ps
+    strided set add (15 b)                     72.0 ps
+    maintenance vs demand arbitration          36.0 ps
+    wire to the pipeline port (500 um, M4)    110.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   295.0 ps
+    required (period)                         333.3 ps
+    SLACK                                     +38.3 ps  MET
+
+  Path: stacked cmd A: pad flop -> deskew -> command decode -> decode flop   [cache tier]
+    clk->Q                                     26.0 ps
+    pad receiver deskew mux                    36.0 ps
+    command field extract                      36.0 ps
+    bank decode 5->32                          90.0 ps
+    subarray decode 4->16                      72.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   311.0 ps
+    required (period)                         666.7 ps
+    SLACK                                    +355.7 ps  MET
+
+  Path: stacked cmd B: decode flop -> repair CAM -> remap -> macro A   [cache tier]
+    clk->Q                                     26.0 ps
+    row-repair CAM compare (4 x 10 b)         100.8 ps
+    column shift-redundancy remap              18.0 ps
+    wire to the bank (1100 um, M4)            242.0 ps
+    macro address setup                        60.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   497.8 ps
+    required (period)                         666.7 ps
+    SLACK                                    +168.9 ps  MET
+
+  Path: stacked read A: subarray macro -> 16:1 sub mux -> bank output flop   [cache tier]
+    clk->Q                                     26.0 ps
+    macro HD_SPSRAM_1024X148 clk->Q (SS 0.68 V)    439.0 ps
+    16:1 subarray mux (148 b)                  72.0 ps
+    wire within the bank (250 um, M4)          55.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   643.0 ps
+    required (period)                         666.7 ps
+    SLACK                                     +23.7 ps  MET
+
+  Path: stacked read B: bank flop -> 32:1 bank mux -> CRC -> pad   [cache tier]
+    clk->Q                                     26.0 ps
+    32:1 bank mux (148 b)                      90.0 ps
+    wire to the bond field (1100 um, M4)      242.0 ps
+    CRC-16 generate                           144.0 ps
+    pad driver + ESD                           45.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   598.0 ps
+    required (period)                         666.7 ps
+    SLACK                                     +68.7 ps  MET
+
+  Path: stacked write: pad flop -> remap -> macro D   [cache tier]
+    clk->Q                                     26.0 ps
+    pad receiver deskew mux                    36.0 ps
+    column shift-redundancy remap (2:1 per bit)     18.0 ps
+    wire to the bank (1100 um, M4)            242.0 ps
+    macro D setup                              60.0 ps
+    setup + skew + jitter                      51.0 ps
+    ------------------------------------------------------
+    arrival                                   433.0 ps
+    required (period)                         666.7 ps
+    SLACK                                    +233.7 ps  MET
+
+==============================================================================
+SUMMARY
+==============================================================================
+  base   worst path : router S3: FIFO -> request register -> 1.8 mm wire -> slice flop
+  base   worst slack:    +4.3 ps   -> Fmax 3.04 GHz
+  cache  worst path : stacked read A: subarray macro -> 16:1 sub mux -> bank output flop
+  cache  worst slack:   +23.7 ps   -> Fmax 1.56 GHz
+
+  RESULT: ALL PATHS MEET
+
+  Architectural decisions forced by this analysis (all implemented
+  in the RTL, not assumed away):
+    * tag array banked 4x (8192x39) -- a 32768-deep macro is 240 ps
+      and does not fit a 333 ps cycle with wire+setup+skew;
+    * tag hit compare runs on RAW tag bits with SECDED in parallel;
+      serialising decode->compare costs ~140 ps and misses timing;
+    * base data array banked 4x (8192x576);
+    * line ECC decoder split into syndrome / correct stages
+      (vc3d_ecc_line_dec_pipe.v);
+    * stacked bank output registered before the 32:1 bank mux
+      (emitted by gen/vc3d_gen_stack_array.py);
+    * modulo-3 interleave hash pipelined over 3 stages
+      (vc3d_addr_hash_pipe.v).
+
+  Resulting latency (base-die clock cycles, 3.0 GHz):
+    router hash pipeline                  3
+    tag: address / macro read / compare   3
+    base data: address / macro / mux      3
+    ECC decode (2 stages) + response      3
+    --------------------------------------
+    base-die hit (ways 0-3)              12 cycles = 4.0 ns
+
+    a stacked hit replaces the 3 base data-array cycles with
+      bond TX (CRC stage + pad stage)      2 base cycles
+      dielet command decode                2 array cycles
+      subarray access + bank mux           2 array cycles
+      bond RX + deskew                     2 base cycles
+    = 2 + 8 + 2 = 12 base cycles at the 2:1 clock ratio
+    --------------------------------------
+    stacked hit (ways 4-15)              21 cycles = 7.0 ns
+
+  So the stacked region costs +9 base cycles (+3.0 ns) over the
+  base-die region.  AMD quotes +4 core cycles for V-Cache; the gap
+  is the 1.5 GHz dielet clock, which is what buys the 29 Mb/mm^2
+  density and the 0.62 W dielet power in the thermal model.  Two
+  things make that trade work here:
+    * ways 0-3 (8 MiB per slice, 24 MiB total) are on the base die
+      at 12-cycle latency -- there is no equivalent fast region in
+      a monolithic V-Cache slice, and the replacement policy keeps
+      the hottest lines there;
+    * 21 cycles is still ~15x faster than the DRAM access it
+      replaces, which is the comparison that decides performance.
+
+  NOTE: replace with OpenROAD STA (pd/openroad) once a PDK is
+        installed; pd/sdc constrains exactly these paths.

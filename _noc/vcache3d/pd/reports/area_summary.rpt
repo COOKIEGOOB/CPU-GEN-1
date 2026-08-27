@@ -1,0 +1,42 @@
+==============================================================================
+VCACHE-3D  --  area model
+==============================================================================
+
+CACHE DIELET (one per slice, three per package)
+  subarray                    1024 x 148 b = 151,552 b
+  subarray macro area               4132 um^2  (0.0041 mm^2)
+  quadrants (line quarters)   4
+  macros per dielet           2048  (512 per quadrant)
+  array area                       8.462 mm^2
+  cache-die logic                  0.095 mm^2  (63,232 flops)
+  bond pad field (8 x 172)         0.111 mm^2  (1376 pads @ 9 um pitch)
+  core area @ 82% util          10.572 mm^2
+  physical capacity           32 MiB payload (+ 5 MiB ECC/metadata)
+  mapped in hybrid mode       24 MiB (ways 4..15); 32 MiB in stack-only mode
+  bit density                 29.4 Mb/mm^2
+
+BASE DIE
+  tag array per slice              0.874 mm^2  (2.44 MiB of tag)
+  base data array per slice        3.227 mm^2  (9.0 MiB coded = 8 MiB data)
+  RRPV array per slice             0.045 mm^2
+  slice logic                      0.030 mm^2  (18,200 flops)
+  bond pad field per slice         0.111 mm^2
+  ---- per slice total             4.288 mm^2
+  router + global                  0.011 mm^2
+  base core @ 55% util           23.407 mm^2
+
+PACKAGE TOTAL
+  base die                        23.407 mm^2
+  3 x cache dielet                31.715 mm^2
+  total silicon                   55.122 mm^2
+  cache capacity              96 MiB
+  silicon per MiB                 0.5742 mm^2/MiB
+
+  Comparison point: a monolithic 96 MiB L3 built entirely from HP
+  base-die SRAM would need
+      67.3 mm^2 of base-die area (vs 23.4 mm^2 here),
+  i.e. stacking removes ~44 mm^2 from the expensive die.
+
+  Floorplan targets written to pd/openroad/config.mk:
+      base tier  DIE_AREA  0 0 4838 4838 (um)
+      cache tier DIE_AREA  0 0 3251 3251 (um)

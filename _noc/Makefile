@@ -86,8 +86,31 @@ iverilog-ultra:
 	    -f file_list_ultra.f
 	vvp /tmp/tb_chi_ultra_telemetry
 
+# ---- VCACHE-3D: 96 MiB 3D-stacked L3 (see vcache3d/README.md) -------------
+# The subsystem has its own deterministic generators, structural linter and
+# Python golden models, none of which need an EDA tool.
+generate-vcache3d:
+	$(MAKE) -C vcache3d gen
+
+check-vcache3d-generated:
+	$(MAKE) -C vcache3d check
+
+lint-vcache3d:
+	$(MAKE) -C vcache3d lint
+
+model-vcache3d:
+	$(MAKE) -C vcache3d model
+
+reports-vcache3d:
+	$(MAKE) -C vcache3d reports
+
+vcache3d: check-vcache3d-generated lint-vcache3d model-vcache3d reports-vcache3d
+
 clean:
+	$(MAKE) -C vcache3d clean
 	rm -rf csrc *.vpd *.fsdb *.daidir *.log simv* *.key DVEfiles vivado_syn_output *.conf *.rc verdiLog
 
 .PHONY: com sim run_dve iverilog-hnf iverilog-snf iverilog-hni \
-        generate-ultra check-ultra-generated iverilog-ultra clean
+        generate-ultra check-ultra-generated iverilog-ultra clean \
+        generate-vcache3d check-vcache3d-generated lint-vcache3d \
+        model-vcache3d reports-vcache3d vcache3d

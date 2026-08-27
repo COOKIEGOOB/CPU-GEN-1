@@ -1,0 +1,16 @@
+bond pad map
+  signal pads   1376   (8 ch x 172 lanes)
+  power pads    384
+  control pads  24
+  total         1784
+  pitch         9.0 um
+  field extent  3154.5 x 49.5 um
+  field area    0.1561 mm^2
+  base die      4838 um square -> field is 65.2 % of the edge
+  wrote openroad/bond_pad_map_base.csv, bond_pad_map_cache.csv
+bond alignment check
+  base pads   1784
+  cache pads  1784
+  signal pairs checked 1376
+  mirror axis x = 1695.0 um
+  RESULT: base and cache maps mate correctly

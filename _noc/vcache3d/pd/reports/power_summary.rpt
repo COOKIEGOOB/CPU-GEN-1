@@ -1,0 +1,31 @@
+==============================================================================
+VCACHE-3D  --  power model
+==============================================================================
+  base tier 3.0 GHz / 0.95 V   cache tier 1.5 GHz / 0.75 V
+
+operating point                      base   dielet   scrub    total
+                                       mW       mW      mW       mW
+------------------------------------------------------------------------------
+idle (retention, no traffic)         1866      540    0.04     2406
+light (0.05 req/cyc)                 1873     1130    0.04     3003
+nominal (0.30 req/cyc)               1908     1721    0.04     3630
+peak (1.00 req/cyc, 3 slices)        2007     1873    0.00     3880
+
+  peak total          3.88 W
+  nominal total       3.63 W
+  dielet peak (each)  0.62 W   over 10.57 mm^2
+  dielet power density 0.059 W/mm^2  (thermal model uses this as the stacked-layer source term)
+
+  Energy per L3 hit:
+    base-die way (0..3) :   15.1 pJ  (0.24 pJ/byte)
+    stacked way (4..15):   59.7 pJ  (0.93 pJ/byte)
+
+  Note: the stacked hit costs more energy per access than the base-die
+  hit because of the bond link, but far less than the DRAM access it
+  replaces (~20 pJ/byte for DDR5), which is the entire point of the dielet.
+
+  Power management implemented in RTL (rtl/power/):
+    * per-bank sleep / deep-sleep / retention (bank_sleep[31:0])
+    * 8 DVFS levels with a voltage/frequency handshake
+    * thermal throttle driven by 16 on-dielet sensors
+    * scrub suppression while throttled
