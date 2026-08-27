@@ -4,6 +4,11 @@ Scope: `hnf/ hni/ rni/ snf/` (CHI-E NoC nodes, upstream RV-BOSC/OpenNoC + local
 modifications). Goal: latency / throughput. Dates from cycle traces in the RTL
 (stage names `s0`, `sx1`…`sx9` are the designers' own pipeline markers).
 
+**V-Cache pass (HNF L3 sizing + timing vs AMD EPYC V-Cache): see
+`VCACHE_NOTES.md`** — benchmark vs Genoa-X/Turin numbers, the new
+16 MB / 16-way / MSHR-64 / SF-524288 defaults, and the path to
+32/96 MB V-Cache-class configurations.
+
 ---
 
 ## 1. What was changed in this pass
@@ -14,6 +19,7 @@ modifications). Goal: latency / throughput. Dates from cycle traces in the RTL
 | **Restored build/test infrastructure** | `include/`, `misc/`, `tb/`, `case/`, `file_list_tb.f`, `Makefile` | The tree **could not be compiled**: all 9 `include "…_defines.v"/"…_param.v"` files referenced by every node were missing from the repo. Restored verbatim from upstream `RV-BOSC/OpenNoC` (Mulan PSL v2 headers kept) + the 4 testbenches, 136 `tb_hnf` scenario files, and a Makefile (VCS flow + iverilog elaboration smoke targets). | None (additive). |
 | `.gitignore` | repo root | Stops waveform/log dumps (`.vcd/.fsdb/.vpd/.svf/novas*/simv*…`) from accumulating in git — 13 such files were already committed under `_tcore/`; run `git rm --cached _tcore/*.vcd _tcore/*.fsdb* _tcore/*.log _tcore/*.svf _tcore/novas* _tcore/session.tcl _tcore/ucli.key` if you want them untracked. | None. |
 | Docs comment for the bump wiring | `hnf/hnf.v` | Explains the new knobs and their latency cost. | None. |
+| **V-Cache pass** — L3 sizing + data-SRAM timing | `include/hnf_param.v`, `hnf/hnf_data_sram.v`, `hnf/hnf.v` | Defaults raised to an AMD-V-Cache-class slice: L3 4→16 MB (16-way, matching Zen 4/5), MSHR 32→64 (QOS pools auto-scale), SF 131 072→524 288 (kept at 2× L3 lines). 16-way data OR banked 4×(ways/4) — same cycle count, shallower critical path, scales to 32/64-way. Write-only dead `hnf_sram_mask` (16 MB of never-read registers at the new default) removed from the `ram_sp` path. Control-path bump wires sized to native widths. Full AMD benchmark + roadmap: `VCACHE_NOTES.md`. | None in regression: the TBs pin their own 23 parameters explicitly (4 MB / 32 / 131 072), and the RTL edits are cycle-identical. |
 
 **Deliberately not touched:** the upstream node RTL (MSHR state machines,
 coherence pipeline, QoS sequencers, link credit loops). See §4 for why, and
@@ -77,15 +83,25 @@ The upstream datapath is clean on the happy path; the levers are:
    register row) and the `init/debug/cpl` mux bank in `hnf_mem_ctl.v`.
 2. **Bandwidth:** `CHIE_DATA_WIDTH_PARAM` 256→512 doubles DAT bandwidth per
    flit (DBF entry = `CHIE_DATA_WIDTH_PARAM*2`); at the cost of link/XP width.
-3. **Outstanding capacity:** `HNF_MSHR_ENTRIES_NUM_PARAM` (32) and the QoS pool
-   split (`QOS_*_POOL_NUM` in `include/hnf_defines.v`) bound in-flight
-   coherent traffic for 4 RNFs; shortfalls show up as RetryAck storms (check
-   `retry_ack_fifo` activity in tb_hnf).
-4. **DBF pressure:** 32 × 512-bit DBF; when full, L3 fills and MSHR retirements
-   stall (`l3_fill_data_busy_sx_q`, `txdat_mshr_busy_sx`) — the ceiling for
-   write-heavy mixes.
+   **Kept at 256 deliberately**: the 2-flits-per-line geometry (`dataid`
+   00/10, `pe[1:0]`, DBF byte-merge) is built around it — a 512-bit flit is a
+   protocol change, not a parameter flip (VCACHE_NOTES.md §5.3 lists what it
+   touches). 32 B/cyc already matches AMD's 32 B/cyc per-core L3 read
+   interface, so the slice is at parity per core; scale with more HNF slices
+   (VCACHE_NOTES.md §5.2).
+3. **Outstanding capacity:** `HNF_MSHR_ENTRIES_NUM_PARAM` (now **64 default**,
+   was 32) and the QoS pool split (`QOS_*_POOL_NUM` in `include/hnf_defines.v`,
+   auto-scaled to 4/12/16/31) bound in-flight coherent traffic for 4 RNFs;
+   shortfalls show up as RetryAck storms (check `retry_ack_fifo` activity in
+   tb_hnf).
+4. **DBF pressure:** **64-entry** (was 32) × 512-bit DBF; when full, L3 fills
+   and MSHR retirements stall (`l3_fill_data_busy_sx_q`, `txdat_mshr_busy_sx`)
+   — the ceiling for write-heavy mixes.
 5. **L3 SRAM porting:** 1R1W per set-index; same-set hit+fill conflicts cost a
    cycle — look for it in the `l3_rd_busy`/`l3_fill_busy` toggling in sim.
+   (The 16-way read OR feeding `l3_rd_data_q` is now banked 4×(ways/4) —
+   VCACHE_NOTES.md §3.2 — so the way-select itself is no longer the timing
+   wall on that path.)
 
 ---
 

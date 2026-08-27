@@ -364,16 +364,24 @@ module hnf `HNF_PARAM
     //     Only enable a stage where a synthesis/timing report actually
     //     requires it; every enabled stage adds one cycle of latency on
     //     the L3 <-> DBF <-> mem_ctl data/control path.
+    //
+    // V-Cache sizing: L3 capacity / MSHR / snoop-filter defaults were raised
+    // to an AMD-EPYC-V-Cache-class configuration in include/hnf_param.v
+    // (16 MB, 16-way, MSHR 64, SF 524288). See _noc/VCACHE_NOTES.md for the
+    // full analysis vs AMD V-Cache and the tuning knobs.
+    // V-Cache fix: control-path bump wires sized to their native widths
+    // (they were copy-pasted at CACHE_LINE_WIDTH, leaving 512b-wide dead
+    // bits on 14/6-bit signals).
     wire [`CACHE_LINE_WIDTH-1:0]                l3_rd_data_q_bump1out;
     wire [`CACHE_LINE_WIDTH-1:0]                l3_rd_data_q_bump2out;
     wire [`CACHE_LINE_WIDTH-1:0]                dbf_l3_wr_data_q_bump3out;
     wire [`CACHE_LINE_WIDTH-1:0]                dbf_l3_wr_data_q_bump4out;
-    wire [`CACHE_LINE_WIDTH-1:0]                cpl_l3_index_q_bump5out;
-    wire [`CACHE_LINE_WIDTH-1:0]                cpl_l3_rd_ways_q_bump5out;
-    wire [`CACHE_LINE_WIDTH-1:0]                cpl_l3_wr_ways_q_bump5out;
-    wire [`CACHE_LINE_WIDTH-1:0]                cpl_l3_index_q_bump6out;
-    wire [`CACHE_LINE_WIDTH-1:0]                cpl_l3_rd_ways_q_bump6out;
-    wire [`CACHE_LINE_WIDTH-1:0]                cpl_l3_wr_ways_q_bump6out;
+    wire [`LOC_INDEX_WIDTH-1:0]                 cpl_l3_index_q_bump5out;
+    wire [`LOC_WAY_NUM-1:0]                     cpl_l3_rd_ways_q_bump5out;
+    wire [`LOC_WAY_NUM-1:0]                     cpl_l3_wr_ways_q_bump5out;
+    wire [`LOC_INDEX_WIDTH-1:0]                 cpl_l3_index_q_bump6out;
+    wire [`LOC_WAY_NUM-1:0]                     cpl_l3_rd_ways_q_bump6out;
+    wire [`LOC_WAY_NUM-1:0]                     cpl_l3_wr_ways_q_bump6out;
 
     hnf_link `HNF_PARAM_INST
              u_hnf_link(
