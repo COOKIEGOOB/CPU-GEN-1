@@ -40,7 +40,8 @@ module vc3d_bond_channel #(
     parameter SIGNAL_LANE = 164,
     parameter SPARE_LANE  = 8,
     parameter PHYS_LANE   = 172,
-    parameter CREDITS     = 8
+    parameter CREDITS     = 8,
+    parameter DDR         = `VC3D_BOND_DDR_ENABLE
 ) (
     input  wire                        clk,
     input  wire                        rst,
@@ -81,6 +82,31 @@ module vc3d_bond_channel #(
 );
 
     localparam BEAT_W = CMD_W + PAYLOAD_W;      // 148
+
+    // =========================================================================
+    // DDR clock multiplexing / gearbox removal.
+    //
+    // In DDR mode the forwarded 1.5 GHz clock is sampled on both edges, so
+    // each lane carries two 144-bit sublines per 3.0 GHz base cycle.  This lets
+    // the link round trip run at `VC3D_BOND_DDR_RTT_CYCLES` (2) instead of the
+    // legacy `VC3D_BOND_RTT_CYCLES` (4).  The gearbox module produces the
+    // even/odd phase select used by every lane receiver.
+    // =========================================================================
+    wire        ddr_enable = 1'b1 & DDR;
+    wire        fwd_clk;
+    reg         ddr_phase;
+    wire        gearbox_bypassed;
+
+    vc3d_bond_ddr_gearbox #(
+        .DDR (DDR)
+    ) u_ddr_gearbox (
+        .clk             (clk),
+        .rst             (rst),
+        .ddr_enable      (ddr_enable),
+        .fwd_clk         (fwd_clk),
+        .phase_sel       (ddr_phase),
+        .gearbox_bypassed(gearbox_bypassed)
+    );
 
     // =========================================================================
     // Training pattern generator (shared by both directions)
@@ -155,11 +181,14 @@ module vc3d_bond_channel #(
     // PHY lanes
     // =========================================================================
     wire [PHYS_LANE-1:0] phys_rx_bit;
+    wire [PHYS_LANE-1:0] phys_rx_bit_even;
+    wire [PHYS_LANE-1:0] phys_rx_bit_odd;
     genvar gl;
     generate
         for (gl = 0; gl < PHYS_LANE; gl = gl + 1) begin : g_lane
             vc3d_bond_lane #(
-                .LANE_ID (gl)
+                .LANE_ID (gl),
+                .DDR     (DDR)
             ) u_lane (
                 .clk           (clk),
                 .rst           (rst),
@@ -169,6 +198,10 @@ module vc3d_bond_channel #(
                 .pad_oe        (pad_oe[gl]),
                 .pad_in        (pad_in[gl]),
                 .rx_bit        (phys_rx_bit[gl]),
+                .rx_bit_even   (phys_rx_bit_even[gl]),
+                .rx_bit_odd    (phys_rx_bit_odd[gl]),
+                .ddr_enable    (ddr_enable),
+                .ddr_phase     (ddr_phase),
                 .lane_enable   (lane_enable[gl]),
                 .lane_dead     (lane_dead[gl]),
                 .deskew_beats  (lane_deskew[gl*2 +: 2]),

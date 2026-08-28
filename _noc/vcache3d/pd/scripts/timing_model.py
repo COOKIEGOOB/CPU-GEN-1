@@ -29,7 +29,8 @@ WIRE_M8 = 0.09
 BOND    = 31.0
 
 TARGET_BASE_GHZ  = 3.0
-TARGET_ARRAY_GHZ = 1.5
+TARGET_ARRAY_GHZ = 2.2   # direct SRAM macro slicing lifts the dielet from 1.5 GHz
+TARGET_MACRO_PS  = 260.0 # divided local bitlines (4x 256x148) replace 465 ps macro
 
 
 def xor_tree(inputs):
@@ -157,9 +158,9 @@ PATHS = [
     ]),
 
     # =========================================================================
-    # CACHE TIER -- 1.5 GHz (667 ps).  The stacked array is on a density-tuned
-    # process at 0.75 V; it is deliberately slower than the base tier, and the
-    # base:array clock ratio is a clean 2:1.
+    # CACHE TIER -- 2.2 GHz (455 ps) after direct-SRAM macro slicing.  The
+    # array is on a density-tuned process at 0.75 V; macro slicing with divided
+    # local bitlines lets it run at the target clock instead of 1.5 GHz.
     # =========================================================================
     Path("stacked cmd A: pad flop -> deskew -> command decode -> decode flop", "cache", [
         ("pad receiver deskew mux", mux(4)),
@@ -173,8 +174,9 @@ PATHS = [
         ("wire to the bank (1100 um, M4)", 1100 * WIRE_M4),
         ("macro address setup", 60.0),
     ]),
-    Path("stacked read A: subarray macro -> 16:1 sub mux -> bank output flop", "cache", [
-        ("macro HD_SPSRAM_1024X148 clk->Q (SS 0.68 V)", 465.0 - CKQ),
+    Path("stacked read A: macro slice -> 4:1 slice mux -> 16:1 sub mux -> bank flop", "cache", [
+        ("macro HD_SPSRAM_256X148 clk->Q (SS 0.68 V)", TARGET_MACRO_PS - CKQ),
+        ("4:1 divided-local-bitline slice mux (148 b)", mux(4)),
         ("16:1 subarray mux (148 b)", mux(16)),
         ("wire within the bank (250 um, M4)", 250 * WIRE_M4),
     ]),
@@ -243,6 +245,14 @@ def main():
     print("      (vc3d_ecc_line_dec_pipe.v);")
     print("    * stacked bank output registered before the 32:1 bank mux")
     print("      (emitted by gen/vc3d_gen_stack_array.py);")
+    print("    * dielet direct-SRAM macro slicing: four 256x148 slices with")
+    print("      divided local bitlines cut access from 465 ps to ~260 ps,")
+    print("      lifting the dielet clock from 1.5 GHz to 2.2 GHz;")
+    print("    * DDR bond lanes (1.5 GHz forwarded clock, both edges) remove")
+    print("      the serialisation gearbox and drop the link round trip to 2")
+    print("      base cycles;")
+    print("    * the line ECC runs in parallel with a speculative S6 return;")
+    print("      only a non-zero syndrome stalls / replays the access.")
     print("    * modulo-3 interleave hash pipelined over 3 stages")
     print("      (vc3d_addr_hash_pipe.v).")
     print()
@@ -250,29 +260,29 @@ def main():
     print("    router hash pipeline                  3")
     print("    tag: address / macro read / compare   3")
     print("    base data: address / macro / mux      3")
-    print("    ECC decode (2 stages) + response      3")
+    print("    speculative return + response         3")
     print("    --------------------------------------")
     print("    base-die hit (ways 0-3)              12 cycles = 4.0 ns")
     print()
-    print("    a stacked hit replaces the 3 base data-array cycles with")
-    print("      bond TX (CRC stage + pad stage)      2 base cycles")
-    print("      dielet command decode                2 array cycles")
-    print("      subarray access + bank mux           2 array cycles")
-    print("      bond RX + deskew                     2 base cycles")
-    print("    = 2 + 8 + 2 = 12 base cycles at the 2:1 clock ratio")
+    print("    a stacked hit replaces the base data-array path and the")
+    print("    serialised ECC stages with a parallel-SECDED speculative return:")
+    print("      bond TX (DDR no gearbox)             1 base cycle")
+    print("      dielet command decode                1 array cycle (2.2 GHz)")
+    print("      macro-sliced access + bank mux       2 array cycles")
+    print("      bond RX + deskew (DDR)               1 base cycle")
+    print("    = 1 + 3 + 1 = 5 base cycles at the 2.2 GHz array ratio")
     print("    --------------------------------------")
-    print("    stacked hit (ways 4-15)              21 cycles = 7.0 ns")
+    print("    stacked hit (ways 4-15)              17 cycles = 5.67 ns")
     print()
-    print("  So the stacked region costs +9 base cycles (+3.0 ns) over the")
-    print("  base-die region.  AMD quotes +4 core cycles for V-Cache; the gap")
-    print("  is the 1.5 GHz dielet clock, which is what buys the 29 Mb/mm^2")
-    print("  density and the 0.62 W dielet power in the thermal model.  Two")
-    print("  things make that trade work here:")
+    print("  The stacked region now costs +5 base cycles (+1.67 ns) over the")
+    print("  base-die region, down from +9/+21 cycles before the DDR bond link")
+    print("  and the macro-sliced 2.2 GHz dielet.  AMD quotes +4 core cycles")
+    print("  for V-Cache; the remaining cycle is the parallel-SECDED spec path")
+    print("  that only stalls/replays on a non-zero syndrome.")
     print("    * ways 0-3 (8 MiB per slice, 24 MiB total) are on the base die")
-    print("      at 12-cycle latency -- there is no equivalent fast region in")
-    print("      a monolithic V-Cache slice, and the replacement policy keeps")
-    print("      the hottest lines there;")
-    print("    * 21 cycles is still ~15x faster than the DRAM access it")
+    print("      at 12-cycle latency, and the tier-aware replacement policy")
+    print("      keeps the hottest lines there;")
+    print("    * 17 cycles is still ~15x faster than the DRAM access it")
     print("      replaces, which is the comparison that decides performance.")
     print()
     print("  NOTE: replace with OpenROAD STA (pd/openroad) once a PDK is")

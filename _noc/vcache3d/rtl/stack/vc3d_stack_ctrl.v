@@ -43,7 +43,10 @@ module vc3d_stack_ctrl #(
     parameter CH_NUM   = 8,
     parameter PAYLOAD_W= 144,
     parameter CMD_W    = 4,
-    parameter TAG_W    = 8
+    parameter TAG_W    = 8,
+    parameter DDR      = `VC3D_BOND_DDR_ENABLE,
+    parameter RTT_CYCLES = DDR ? `VC3D_BOND_DDR_RTT_CYCLES
+                               : `VC3D_BOND_RTT_CYCLES
 ) (
     input  wire                         clk,
     input  wire                         rst,
@@ -92,7 +95,9 @@ module vc3d_stack_ctrl #(
     output reg  [31:0]                  stack_read_count,
     output reg  [31:0]                  stack_write_count,
     output reg  [31:0]                  stack_retry_count,
-    output wire [7:0]                   outstanding
+    output wire [7:0]                   outstanding,
+    output reg  [4:0]                   stack_latency_cycles,
+    output wire                         ddr_enabled
 );
 
     // -------------------------------------------------------------------------
@@ -101,6 +106,8 @@ module vc3d_stack_ctrl #(
     wire [BANK_W-1:0] dec_bank = req_set[4:0] ^ {1'b0, req_way};
     wire [SUB_W-1:0]  dec_sub  = req_set[8:5];
     wire [ROW_W-1:0]  dec_row  = {req_set[14:9], req_way};
+
+    assign ddr_enabled = DDR;
 
     // -------------------------------------------------------------------------
     // Outstanding-transaction tracker.  A line uses 4 channels; the controller
@@ -132,6 +139,7 @@ module vc3d_stack_ctrl #(
             tx_payload <= {(CH_NUM*PAYLOAD_W){1'b0}};
             stack_read_count  <= 32'd0;
             stack_write_count <= 32'd0;
+            stack_latency_cycles <= RTT_CYCLES[4:0];
         end
         else begin
             tx_valid <= {CH_NUM{1'b0}};

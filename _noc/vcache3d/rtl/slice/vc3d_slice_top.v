@@ -29,7 +29,8 @@ module vc3d_slice_top #(
     parameter BASE_WAYS = 4,
     parameter ID_W      = 12,
     parameter CH_NUM    = 8,
-    parameter PHYS_LANE = 172
+    parameter PHYS_LANE = 172,
+    parameter DDR       = `VC3D_BOND_DDR_ENABLE
 ) (
     input  wire                       clk,
     input  wire                       rst,
@@ -52,6 +53,15 @@ module vc3d_slice_top #(
     output wire                       rsp_ce,
     output wire                       rsp_ue,
     output wire                       rsp_poison,
+    output wire                       rsp_spec,
+    output wire                       rsp_parity_ok,
+    output wire                       replay_valid,
+    output wire [ID_W-1:0]            replay_id,
+    output wire [47:0]                replay_addr,
+    output wire [511:0]               replay_data,
+    output wire                       replay_ce,
+    output wire                       replay_ue,
+    output wire                       replay_poison,
 
     // ---- next level (memory / SN-F) ---------------------------------------------
     output wire                       miss_valid,
@@ -113,6 +123,9 @@ module vc3d_slice_top #(
     wire              tag_lookup_valid, tag_lookup_done, tag_hit, tag_ce, tag_ue;
     wire [SET_W-1:0]  tag_lookup_set;
     wire [TAG_W-1:0]  tag_lookup_tag;
+    wire [3:0]        tag_lookup_qos;
+    wire              tag_lookup_prefetch;
+    wire              tag_victim_tier;
     wire [WAY_W-1:0]  tag_hit_way, tag_victim_way;
     wire [2:0]        tag_hit_state;
     wire              tag_hit_dirty, tag_victim_valid, tag_victim_dirty;
@@ -266,12 +279,19 @@ module vc3d_slice_top #(
         .rsp_valid (rsp_valid), .rsp_ready (rsp_ready), .rsp_id (rsp_id),
         .rsp_data (rsp_data), .rsp_hit (rsp_hit), .rsp_ce (rsp_ce),
         .rsp_ue (rsp_ue), .rsp_poison (rsp_poison),
+        .rsp_spec (rsp_spec), .rsp_parity_ok (rsp_parity_ok),
+        .replay_valid (replay_valid), .replay_id (replay_id),
+        .replay_addr (replay_addr), .replay_data (replay_data),
+        .replay_ce (replay_ce), .replay_ue (replay_ue),
+        .replay_poison (replay_poison),
         .miss_valid (miss_valid), .miss_ready (miss_ready), .miss_addr (miss_addr),
         .miss_id (miss_id), .miss_is_write (miss_is_write), .miss_wdata (miss_wdata),
         .fill_valid (fill_valid), .fill_addr (fill_addr), .fill_id (fill_id),
         .fill_data (fill_data),
         .tag_lookup_valid (tag_lookup_valid), .tag_lookup_set (tag_lookup_set),
-        .tag_lookup_tag (tag_lookup_tag), .tag_lookup_done (tag_lookup_done),
+        .tag_lookup_tag (tag_lookup_tag), .tag_lookup_qos (tag_lookup_qos),
+        .tag_lookup_prefetch (tag_lookup_prefetch),
+        .tag_lookup_done (tag_lookup_done),
         .tag_hit (tag_hit), .tag_hit_way (tag_hit_way), .tag_hit_state (tag_hit_state),
         .tag_hit_dirty (tag_hit_dirty), .tag_ce (tag_ce), .tag_ue (tag_ue),
         .tag_victim_way (tag_victim_way), .tag_victim_valid (tag_victim_valid),
@@ -306,19 +326,25 @@ module vc3d_slice_top #(
     // Tag array
     // =========================================================================
     vc3d_tag_array #(
-        .SETS (1 << SET_W), .SET_W (SET_W), .WAYS (WAYS), .WAY_W (WAY_W), .TAG_W (TAG_W)
+        .SETS (1 << SET_W), .SET_W (SET_W), .WAYS (WAYS), .WAY_W (WAY_W),
+        .TAG_W (TAG_W), .BASE_WAYS (BASE_WAYS),
+        .TIER_AWARE (`VC3D_TIER_AWARE_REPL_ENABLE)
     ) u_tag (
         .clk (clk), .rst (rst),
         .lookup_valid (tag_lookup_valid), .lookup_set (tag_lookup_set),
-        .lookup_tag (tag_lookup_tag), .lookup_done (tag_lookup_done),
+        .lookup_tag (tag_lookup_tag), .lookup_qos (tag_lookup_qos),
+        .lookup_prefetch (tag_lookup_prefetch), .stack_enable (link_up_all),
+        .lookup_done (tag_lookup_done),
         .hit (tag_hit), .hit_way (tag_hit_way), .hit_state (tag_hit_state),
         .hit_dirty (tag_hit_dirty), .tag_ce (tag_ce), .tag_ue (tag_ue),
         .victim_way (tag_victim_way), .victim_valid (tag_victim_valid),
         .victim_dirty (tag_victim_dirty), .victim_tag (tag_victim_tag),
+        .victim_tier (tag_victim_tier),
         .upd_valid (tag_upd_valid), .upd_set (tag_upd_set), .upd_way (tag_upd_way),
         .upd_tag (tag_upd_tag), .upd_state (tag_upd_state), .upd_dirty (tag_upd_dirty),
         .upd_insert (tag_upd_insert), .upd_invalidate (tag_upd_invalidate),
         .way_disable (csr_way_disable | way_disable_repair), .rrip_bimodal_en (1'b1),
+        .hot_qos_threshold (`VC3D_TIER_HOT_QOS_THRESHOLD),
         .hit_count (tag_hit_count), .miss_count (tag_miss_count),
         .tag_ce_count (tag_ce_count), .tag_ue_count (tag_ue_count)
     );
@@ -339,7 +365,7 @@ module vc3d_slice_top #(
     // Stacked-array controller + bond link (base-die side)
     // =========================================================================
     vc3d_stack_ctrl #(
-        .SET_W (SET_W), .WAY_W (WAY_W), .CH_NUM (CH_NUM)
+        .SET_W (SET_W), .WAY_W (WAY_W), .CH_NUM (CH_NUM), .DDR (DDR)
     ) u_stack_ctrl (
         .clk (clk), .rst (rst),
         .req_valid (stk_req_valid), .req_ready (stk_req_ready), .req_we (stk_req_we),
@@ -360,7 +386,7 @@ module vc3d_slice_top #(
     );
 
     vc3d_bond_link #(
-        .CH_NUM (CH_NUM), .PHYS_LANE (PHYS_LANE)
+        .CH_NUM (CH_NUM), .PHYS_LANE (PHYS_LANE), .DDR (DDR)
     ) u_bond (
         .clk (clk), .rst (rst),
         .tx_valid (btx_valid), .tx_ready (btx_ready), .tx_cmd (btx_cmd),

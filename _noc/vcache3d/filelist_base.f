@@ -31,11 +31,16 @@ rtl/slice/vc3d_sram_sp.v
 rtl/slice/vc3d_tag_array.v
 rtl/stack/vc3d_bond_channel.v
 rtl/stack/vc3d_bond_crc16.v
+rtl/stack/vc3d_bond_ddr_gearbox.v
 rtl/stack/vc3d_bond_lane.v
 rtl/stack/vc3d_bond_link.v
 rtl/stack/vc3d_stack_bank_array.v
 rtl/stack/vc3d_stack_ctrl.v
 rtl/stack/vc3d_stack_die_top.v
+rtl/stack/vc3d_stack_macro_bank.v
+rtl/stack/vc3d_stack_macro_cell.v
+rtl/stack/vc3d_stack_macro_slice_array.v
+rtl/stack/vc3d_stack_macro_subarray.v
 rtl/stack/vc3d_stack_subarray.v
 rtl/top/hnf_vcache3d_adapter.v
 rtl/top/vc3d_addr_hash.v

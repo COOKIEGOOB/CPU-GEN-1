@@ -7,13 +7,13 @@ programs rather than asserted.
 
 | what | how | status |
 |---|---|---|
-| RTL structure, ports, macros | `gen/vc3d_lint.py` | 47 files, 89 modules, 0 errors, 0 warnings |
+| RTL structure, ports, macros | `gen/vc3d_lint.py` | 52 files, 126 modules, 0 errors, 0 warnings |
 | algorithms | `model/test_vc3d_model.py` | 25/25 pass |
 | ECC matrices | self-test inside `gen/vc3d_gen_ecc.py` | SEC/DED proven exhaustively for all 5 widths |
-| timing | `pd/scripts/timing_model.py` | all paths meet at 3.0 / 1.5 GHz |
+| timing | `pd/scripts/timing_model.py` | all paths meet at 3.0 / 2.2 GHz (macro-sliced dielet) |
 | area | `pd/scripts/area_model.py` | 23.4 mm2 base + 3 x 10.57 mm2 dielet |
-| power | `pd/scripts/power_model.py` | 2.4 W idle, 3.9 W peak |
-| thermal | `pd/thermal/thermal_model.py` | +3.3 C stacking penalty, throttle at 16 W |
+| power | `pd/scripts/power_model.py` | 2.4 W idle, 3.9 W peak (dielet now 2.2 GHz) |
+| thermal | `pd/thermal/thermal_model.py` | inverted Zen 5 stack, +0.5 C stacking penalty, throttle at 16 W |
 | package | `pd/package/check_bond_alignment.py` | 1376 lane pairs mate, mirror correct |
 | testbenches | `tb/*.sv` | written for VCS/Verilator, elaborated structurally by the linter |
 

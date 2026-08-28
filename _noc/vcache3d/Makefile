@@ -22,20 +22,24 @@ all: gen lint model reports
 gen:
 	$(PYTHON) gen/vc3d_gen_ecc.py
 	$(PYTHON) gen/vc3d_gen_stack_array.py
+	$(PYTHON) gen/vc3d_gen_macro_slice_array.py
 	$(PYTHON) gen/vc3d_gen_filelists.py
 
 check:
 	@cp -r rtl/ecc /tmp/vc3d_ecc_ref
 	@cp rtl/stack/vc3d_stack_bank_array.v /tmp/vc3d_array_ref.v
+	@cp rtl/stack/vc3d_stack_macro_slice_array.v /tmp/vc3d_macro_ref.v
 	@cp filelist_base.f /tmp/vc3d_flist_ref.f
 	@$(MAKE) --no-print-directory gen >/dev/null
 	@diff -r /tmp/vc3d_ecc_ref rtl/ecc >/dev/null \
 	    || (echo "ERROR: rtl/ecc is stale, run 'make gen'"; exit 1)
 	@diff /tmp/vc3d_array_ref.v rtl/stack/vc3d_stack_bank_array.v >/dev/null \
 	    || (echo "ERROR: vc3d_stack_bank_array.v is stale, run 'make gen'"; exit 1)
+	@diff /tmp/vc3d_macro_ref.v rtl/stack/vc3d_stack_macro_slice_array.v >/dev/null \
+	    || (echo "ERROR: vc3d_stack_macro_slice_array.v is stale, run 'make gen'"; exit 1)
 	@diff /tmp/vc3d_flist_ref.f filelist_base.f >/dev/null \
 	    || (echo "ERROR: filelist_base.f is stale, run 'make gen'"; exit 1)
-	@rm -rf /tmp/vc3d_ecc_ref /tmp/vc3d_array_ref.v /tmp/vc3d_flist_ref.f
+	@rm -rf /tmp/vc3d_ecc_ref /tmp/vc3d_array_ref.v /tmp/vc3d_macro_ref.v /tmp/vc3d_flist_ref.f
 	@echo "generated sources are up to date"
 
 lint:

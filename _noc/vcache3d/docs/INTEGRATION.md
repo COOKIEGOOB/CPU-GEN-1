@@ -17,6 +17,17 @@ l3_rd_data_q   64 B line out, registered
 from the 3D stack. The HN-F pipeline keeps its tags, its snoop filter, its
 MSHRs and its coherence logic; only where the data lives changes.
 
+## Native 512-bit CHI DAT
+
+The stock NoC DAT flit is 256 bits (`CHIE_DATA_WIDTH_PARAM`), so a 64 B line
+used to arrive as 2 flits.  The adapter now exposes a **native 512-bit CHI DAT**
+internal interface (`DAT_WIDTH`/`FLIT_WIDTH`/`FLITS_PER_LINE`).  When the NoC
+presents two 256-bit flits (`hnf_dat_lo`/`hnf_dat_hi` with
+`hnf_dat_lo_valid`/`hnf_dat_hi_valid`, or `hnf_dat_hi_wide` in native mode), it
+packs them into a single 512-bit directed line access, so the cache array moves
+**64 B/cycle** and the peak HN-F bandwidth is no longer divided by two.  The
+legacy `l3_wr_data_q` port still works unchanged.
+
 ## Two things the old port cannot express
 
 **Variable latency.** A stacked way takes longer than a base-die way. The
@@ -66,5 +77,5 @@ make -C _noc/vcache3d model    # golden-model property tests
 make -C _noc/vcache3d reports  # PPA / thermal / package models
 ```
 
-`filelist_base.f` builds the base die (42 files), `filelist_cache.f` the
-dielet (8 files), `filelist_tb.f` the testbenches.
+`filelist_base.f` builds the base die (47 files), `filelist_cache.f` the
+dielet (13 files), `filelist_tb.f` the testbenches.

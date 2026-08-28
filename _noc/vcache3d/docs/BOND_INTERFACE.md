@@ -59,3 +59,13 @@ Source-synchronous: the base die forwards a divided clock to the dielet, which
 has no PLL of its own. The static budget is 180 ps each way (pad driver, 900 um
 on-die run, receiver); per-lane deskew handles the rest. Constraints are in
 `pd/sdc/vc3d_base.sdc` and `pd/sdc/vc3d_cache.sdc`.
+
+## DDR clock multiplexing (bond lanes)
+
+The bond lanes run in **Double Data Rate** at 3.0 GHz (forwarded 1.5 GHz clock
+sampled on both edges). Each 144-bit lane carries two sublines per 3.0 GHz base
+cycle, so a 64 B line plus its SECDED checks moves in one half-cycle and the
+serialisation gearbox is eliminated. The round trip drops from 4 base cycles
+to 2 (`VC3D_BOND_DDR_RTT_CYCLES`). `vc3d_bond_ddr_gearbox.v` is the forwarded
+clock/phase front-end; `vc3d_bond_lane` samples the pad on `posedge`/`negedge`
+and `vc3d_bond_channel` steers the even/odd phases.

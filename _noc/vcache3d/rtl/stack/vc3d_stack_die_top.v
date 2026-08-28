@@ -36,7 +36,8 @@ module vc3d_stack_die_top #(
     parameter ROW_W      = 10,
     parameter SPARE_ROWS = 4,
     parameter SPARE_COLS = 4,
-    parameter COL_ID_W   = 6
+    parameter COL_ID_W   = 6,
+    parameter DDR        = `VC3D_BOND_DDR_ENABLE
 ) (
     // forwarded clock / reset over the bond interface
     input  wire                                      clk,
@@ -86,7 +87,8 @@ module vc3d_stack_die_top #(
         .CH_NUM    (CH_NUM),
         .PAYLOAD_W (PAYLOAD_W),
         .CMD_W     (CMD_W),
-        .PHYS_LANE (PHYS_LANE)
+        .PHYS_LANE (PHYS_LANE),
+        .DDR       (DDR)
     ) u_bond (
         .clk               (clk),
         .rst               (rst),
@@ -211,7 +213,12 @@ module vc3d_stack_die_top #(
     genvar q;
     generate
         for (q = 0; q < 4; q = q + 1) begin : g_quad
-            vc3d_stack_die_array u_array (
+            // Dielet Frequency Upgrade: direct SRAM macro slicing.  The four
+            // quadrants now use divided-local-bitline 256 x 148 macro slices
+            // (vc3d_stack_macro_die_array) instead of the legacy 1024 x 148
+            // macros, cutting macro access from ~465 ps to ~260 ps and lifting
+            // the dielet clock from 1.5 GHz to `VC3D_STACK_DIELET_CLOCK_MHZ.
+            vc3d_stack_macro_die_array u_array (
                 .clk             (clk),
                 .rst             (rst),
                 .ce              (arr_ce),

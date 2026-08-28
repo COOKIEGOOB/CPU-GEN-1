@@ -7,7 +7,7 @@ and from CV^2 estimates for the bond link and the logic.
 """
 
 # ---- per-access energies (pJ) ----------------------------------------------
-E_HD_MACRO_RD   = 0.62      # 1024x148 HD macro, 0.75 V nominal
+E_HD_MACRO_RD   = 0.62      # 4x 256x148 macro-slice set, 0.75 V nominal (same array)
 E_HD_MACRO_WR   = 0.74
 E_HP_TAG_RD     = 0.41      # 8192x39 HP macro
 E_HP_DATA_RD    = 2.90      # 8192x576 HP macro
@@ -33,7 +33,7 @@ TAG_MACROS  = 16 * 4         # 16 ways x 4 set banks
 DATA_MACROS = 4 * 4          # 4 base ways x 4 set banks
 
 BASE_GHZ  = 3.0
-ARRAY_GHZ = 1.5
+ARRAY_GHZ = 2.2   # direct-SRAM macro slicing lifts the dielet from 1.5 GHz
 
 
 class Point:

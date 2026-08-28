@@ -22,7 +22,8 @@
 
 module vc3d_bond_lane #(
     parameter LANE_ID       = 0,
-    parameter MAX_DESKEW    = 4      // beats of programmable delay
+    parameter MAX_DESKEW    = 4,     // beats of programmable delay
+    parameter DDR           = `VC3D_BOND_DDR_ENABLE
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -36,6 +37,12 @@ module vc3d_bond_lane #(
     // receive side -----------------------------------------------------------
     input  wire        pad_in,
     output wire        rx_bit,
+    output wire        rx_bit_even,
+    output wire        rx_bit_odd,
+
+    // DDR clock multiplexing -------------------------------------------------
+    input  wire        ddr_enable,
+    input  wire        ddr_phase,
 
     // configuration ----------------------------------------------------------
     input  wire        lane_enable,
@@ -61,16 +68,30 @@ module vc3d_bond_lane #(
     assign pad_oe  = tx_active & tx_en;
 
     // -------------------------------------------------------------------------
-    // Receive: programmable 0..MAX_DESKEW-1 beat delay line.
+    // Receive: DDR clock multiplexing.  The lane samples the bond pad on both
+    // edges of the forwarded 1.5 GHz clock, giving one full 144-bit beat per
+    // phase (two per 3.0 GHz base cycle) and eliminating the serialisation
+    // gearbox.  The even/odd phase select comes from vc3d_bond_ddr_gearbox.
     // -------------------------------------------------------------------------
-    reg [MAX_DESKEW-1:0] rx_pipe;
+    reg [MAX_DESKEW-1:0] rx_pipe_even, rx_pipe_odd;
     always @(posedge clk or posedge rst) begin
-        if (rst) rx_pipe <= {MAX_DESKEW{1'b0}};
-        else     rx_pipe <= {rx_pipe[MAX_DESKEW-2:0], (pad_in ^ invert)};
+        if (rst) rx_pipe_even <= {MAX_DESKEW{1'b0}};
+        else     rx_pipe_even <= {rx_pipe_even[MAX_DESKEW-2:0], (pad_in ^ invert)};
+    end
+    always @(negedge clk or posedge rst) begin
+        if (rst) rx_pipe_odd <= {MAX_DESKEW{1'b0}};
+        else     rx_pipe_odd <= {rx_pipe_odd[MAX_DESKEW-2:0], (pad_in ^ invert)};
     end
 
-    wire rx_raw = (deskew_beats == 2'd0) ? (pad_in ^ invert) : rx_pipe[deskew_beats-1];
-    assign rx_bit = tx_active ? rx_raw : 1'b0;
+    wire rx_raw_even = (deskew_beats == 2'd0) ? (pad_in ^ invert)
+                                              : rx_pipe_even[deskew_beats-1];
+    wire rx_raw_odd  = (deskew_beats == 2'd0) ? (pad_in ^ invert)
+                                              : rx_pipe_odd[deskew_beats-1];
+    wire rx_raw = ddr_enable ? (ddr_phase ? rx_raw_odd : rx_raw_even) : rx_raw_even;
+
+    assign rx_bit_even = tx_active ? rx_raw_even : 1'b0;
+    assign rx_bit_odd  = tx_active ? rx_raw_odd  : 1'b0;
+    assign rx_bit      = tx_active ? rx_raw      : 1'b0;
 
     // -------------------------------------------------------------------------
     // Training comparison and BER accumulation.

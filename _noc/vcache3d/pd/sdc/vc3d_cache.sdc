@@ -1,14 +1,15 @@
 # =============================================================================
 # CPU-GEN-1 : VCACHE-3D -- cache-dielet (stacked SRAM tier) constraints
 #
-# Target: 1.5 GHz, SS 0.68 V array / 0.75 V periphery, 125 C.
+# Target: 2.2 GHz after direct-SRAM macro slicing (4x 256x148, divided local
+# bitlines), SS 0.68 V array / 0.75 V periphery, 125 C.
 # The dielet has NO local oscillator: its clock arrives over the bond field,
 # so it is created here as a port clock with the base-die jitter folded in.
 #
 # SPDX-License-Identifier: MulanPSL-2.0
 # =============================================================================
 
-set ARRAY_PERIOD 0.6667
+set ARRAY_PERIOD 0.4545
 
 create_clock -name bond_clk -period $ARRAY_PERIOD [get_ports clk]
 

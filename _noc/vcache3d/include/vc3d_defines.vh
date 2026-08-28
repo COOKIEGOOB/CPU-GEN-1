@@ -89,6 +89,22 @@
 `define VC3D_BOND_ST_RETRAIN        3'd6
 `define VC3D_BOND_ST_FAIL           3'd7
 
+// DDR bond-link phase encodings
+`define VC3D_BOND_DDR_PHASE_EVEN      1'b0
+`define VC3D_BOND_DDR_PHASE_ODD       1'b1
+
+// Tier-aware replacement policy hints
+`define VC3D_TIER_CLASS_FAST         2'd0   // L1/L2 instr miss, pointer-chase load
+`define VC3D_TIER_CLASS_NORMAL       2'd1   // general read/write demand
+`define VC3D_TIER_CLASS_BULK         2'd2   // streaming / bulk copy
+`define VC3D_TIER_CLASS_PREFETCH     2'd3   // prefetch (demote to stacked ways)
+`define VC3D_TIER_INSERT_BASE        1'b0
+`define VC3D_TIER_INSERT_STACK       1'b1
+
+// Inverted die-stack orientation encodings
+`define VC3D_STACK_FACE_UP_SUBSTRATE 1'b0
+`define VC3D_STACK_FACE_DOWN_BASE    1'b1
+
 // -----------------------------------------------------------------------------
 // MBIST algorithms
 // -----------------------------------------------------------------------------

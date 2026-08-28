@@ -59,13 +59,13 @@ Modes: `MOD3` (default), `LOW2` (power-of-two subset for debug), `HASH`, and
 | S0 | request accept, set index, direct/normal decode |
 | S1 | tag macro address (4 set banks per way) |
 | S2 | tag macro read, bank mux |
-| S3 | 16-way raw compare, hit encode, victim select; tag SECDED in parallel |
+| S3 | 16-way raw compare, hit encode, victim select; tier-aware way partitioning; tag SECDED in parallel |
 | S4 | data array address (base) or bond command (stacked) |
-| S5 | data macro read |
-| S6 | bank/way mux |
-| S7 | line ECC syndrome |
-| S8 | line ECC correction |
-| S9 | response |
+| S5 | data macro read (base) / macro-sliced dielet read |
+| S6 | bank/way mux, speculative **raw-line + 1-cycle parity/SECDED flag** return |
+| S7 | full SECDED correction runs in parallel (non-critical, only used on error) |
+| S8 | error replay / poison publish only when syndrome ≠ 0 |
+| S9 | response (fast path skips S7/S8 entirely) |
 
 Tag compare runs on the **raw** tag bits with the SECDED decoder in parallel.
 Serialising decode into the compare costs ~140 ps and misses the 333 ps cycle.
@@ -88,8 +88,13 @@ row  = {set[14:9], way}           1024 rows
 quadrant = which 16 B quarter     4 arrays
 ```
 
-Per slice the link moves 8 x 144 b at 1.5 GHz = 216 GB/s, 648 GB/s for the
-package -- comparable to the ~700 GB/s AMD quotes for an 8-core CCD.
+The link is now DDR dual-edge (forwarded 1.5 GHz clock sampled on both edges),
+so each 144-bit lane carries two sublines per 3.0 GHz base cycle and the
+serialisation gearbox is removed.  Per slice the link moves 8 x 144 b x 2 at
+2.2 GHz array = 432 GB/s, 1.30 TB/s for the package -- comfortably above the
+~700 GB/s AMD quotes for an 8-core CCD.  The HN-F adapter exposes a native
+512-bit CHI DAT port, so a 64 B line is one beat (64 B/cycle) rather than two
+256-bit flits.
 
 ## 5. What is on which die
 
@@ -98,6 +103,24 @@ coherence, exactly like a real V-Cache dielet. It has the array, the bond
 endpoint, the repair registers (programmed from the base die), per-bank power
 switches, and 16 thermal sensors. That is what lets it be built on a
 density-optimised process and stay under 0.62 W (see `PPA_REPORT.md`).
+
+### 5.1 Inverted die stack (Zen 5 packaging)
+
+The package uses the Zen 5 inverted topology: the 3D-SRAM dielet is **face-up
+on the package substrate**, the base logic die is bonded **face-down onto the
+dielet**, and the base die backside is ground into direct contact with the
+lid/cooling solution.  The dielet is therefore outside the hot base-die-to-lid
+thermal path.  The +3.3 °C stacking penalty is reduced to +0.5 °C, raising the
+core thermal throttle headroom by ~15–20 %.
+
+### 5.2 Direct SRAM macro slicing
+
+Each 1024 × 148 subarray is banked into four 256 × 148 macro slices with
+divided local bitlines (`vc3d_stack_macro_cell`, generated
+`vc3d_stack_macro_slice_array.v`).  The macro access time drops from ~465 ps
+to ~260 ps, so the dielet runs at `VC3D_STACK_DIELET_CLOCK_MHZ` (2.2 GHz)
+instead of 1.5 GHz -- the largest single contributor to the stacked latency
+reduction.
 
 ## 6. Degradation, not failure
 

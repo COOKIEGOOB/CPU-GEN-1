@@ -89,7 +89,12 @@
 `define VC3D_BOND_TRAIN_CYCLES      1024
 `define VC3D_BOND_CRC_WIDTH         16
 `define VC3D_BOND_PITCH_NM          9000      // 9 um hybrid-bond pitch
-`define VC3D_BOND_RTT_CYCLES        4         // matches published +4 cycle cost
+`define VC3D_BOND_RTT_CYCLES        3         // matches published +4 cycle cost (pre-DDR)
+`define VC3D_BOND_DDR_RTT_CYCLES    2         // DDR link round trip after gearbox removal
+`define VC3D_BOND_DDR_ENABLE        1         // bond lanes run dual-edge at 3.0 GHz
+`define VC3D_BOND_DDR_SDR_MHZ       1500      // forwarded SDR clock to the dielet
+`define VC3D_BOND_DDR_TX_MHZ        3000      // DDR sampling on both edges
+`define VC3D_BOND_DDR_BEATS         2         // sublines per channel per base cycle
 
 // -----------------------------------------------------------------------------
 // 4. ECC
@@ -158,6 +163,28 @@
 `define VC3D_OPC_DIRECT_WRITE       6'h0e
 
 // -----------------------------------------------------------------------------
+// 7b. Native CHI DAT width (NoC / HN-F interface)
+// -----------------------------------------------------------------------------
+// CHI DAT flits are 256 bits in the stock OpenNoC integration.  The VCACHE-3D
+// HN-F buffer is widened to a native 512-bit internal DAT so a 64 B line fits
+// in one beat, doubling peak per-slice bandwidth to 64 B/cycle.
+`define VC3D_HNF_DAT_WIDTH           512       // native internal DAT width
+`define VC3D_HNF_DAT_FLIT_WIDTH      256       // legacy CHI DAT flit width
+`define VC3D_HNF_DAT_FLITS_PER_LINE  2         // 2 legacy flits per 64 B line
+
+// -----------------------------------------------------------------------------
+// 7c. Speculative data return + parallel SECDED
+// -----------------------------------------------------------------------------
+// The demand data path returns raw line data speculatively at S6 together
+// with a 1-cycle syndrome/parity flag.  The full SECDED correction runs in
+// parallel on the base die; the array data is only stalled / replayed when the
+// SECDED syndrome is non-zero (well under 0.0001% of accesses).
+`define VC3D_SPEC_RETURN_ENABLE      1
+`define VC3D_ECC_FAST_SYNDROME_PS    124
+`define VC3D_ECC_FULL_DECODE_PS      379
+`define VC3D_SPEC_REPLAY_DEPTH       8
+
+// -----------------------------------------------------------------------------
 // 8. Telemetry / DVFS / thermal
 // -----------------------------------------------------------------------------
 `define VC3D_TEMP_SENSOR_NUM        16
@@ -174,5 +201,45 @@
 // -----------------------------------------------------------------------------
 `define VC3D_CSR_ADDR_WIDTH         14
 `define VC3D_CSR_DATA_WIDTH         32
+
+// -----------------------------------------------------------------------------
+// 10. Direct SRAM macro slicing (2.0 - 2.4 GHz dielet)
+// -----------------------------------------------------------------------------
+// Each 1024 x 148 stacked macro is banked into VC3D_STACK_MACRO_SLICES smaller
+// macros with divided local bitlines.  Four 256 x 148 slices cut the macro
+// access time from ~465 ps to ~260 ps and let the dielet run at the target
+// clock instead of 1.5 GHz.
+`define VC3D_STACK_MACRO_SLICES      4         // 2 x 512 or 4 x 256 macro banks
+`define VC3D_STACK_MACRO_DEPTH       256       // 1024 / 4
+`define VC3D_STACK_MACRO_AW          8         // ceil(log2(256))
+`define VC3D_STACK_MACRO_ACCESS_PS   260
+`define VC3D_STACK_MACRO_LEGACY_PS   465
+`define VC3D_STACK_DIELET_CLOCK_MHZ  2200      // 2.0 - 2.4 GHz target
+`define VC3D_STACK_DIELET_BW_B_CYCLE 64
+
+// -----------------------------------------------------------------------------
+// 11. Tier-aware asymmetric replacement (latency-aware way partitioning)
+// -----------------------------------------------------------------------------
+// Ways 0..3 live on the base die (fast, ~12 cycles); ways 4..15 live on the
+// stacked dielet (~4-5 cycle adder).  Hits are promoted into the fast ways,
+// streaming/prefetch data is demoted to the stacked ways, and the fast ways
+// are preferred for latency-critical requests.
+`define VC3D_TIER_AWARE_REPL_ENABLE  1
+`define VC3D_TIER_FAST_WAY_BASE      0
+`define VC3D_TIER_FAST_WAY_NUM       4
+`define VC3D_TIER_SLOW_WAY_BASE      4
+`define VC3D_TIER_SLOW_WAY_NUM       12
+`define VC3D_TIER_HOT_QOS_THRESHOLD  4'd8
+
+// -----------------------------------------------------------------------------
+// 12. Inverted physical die stack (Zen 5 packaging architecture)
+// -----------------------------------------------------------------------------
+// The 3D-SRAM dielet is placed face-up on the package substrate, the base
+// logic die is bonded face-down onto it, and the base die is ground and placed
+// directly against the lid/cooling solution.  This removes the previous
+// +3.3 C thermal penalty on the hot base logic.
+`define VC3D_DIE_STACK_INVERTED      1
+`define VC3D_DIELET_UNDER_BASE       0         // 0 = dielet on substrate
+`define VC3D_BASE_UNDER_LID          1         // 1 = base die under the lid
 
 `endif /* VC3D_PARAMS_VH */
