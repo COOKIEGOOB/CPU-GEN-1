@@ -47,6 +47,8 @@ coherence pipeline, QoS sequencers, link credit loops). See §4 for why, and
 ### Throughput ceilings (all verified in RTL)
 
 * **TX DAT: 1 flit/cycle** = 32 B/cycle (256-bit flits); a 64 B line = 2 cycles.
+  `vcache3d/rtl/top/hnf_vcache3d_adapter.v` packs those two flits into one
+  native 512-bit line access, so the cache array itself moves **64 B/cycle**.
 * **L3 tag lookups: 1/cycle**; **MSHR allocs: 1/cycle**; **RX REQ accept: 1/cycle**.
 * **REQ credit loop is 1:1, no steady-state stall** — traced the
   `rxreq_crdcntsm` table in `hnf_link_rxreq_parse.v`: accepted flit returns its

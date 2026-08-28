@@ -4,42 +4,43 @@ VCACHE-3D  --  thermal model (steady state, one dielet column)
 
 layer                   material      thk um   k W/mK     R K/W
 ------------------------------------------------------------------------------
-base die silicon        Si              85.0    110.0     0.073
-hybrid bond interface   SiO2/Cu          0.2     25.0     0.001
+package substrate       pkg/Si         800.0    390.0     0.194
 cache dielet silicon    Si              36.0    110.0     0.031
-dielet backside TIM     TIM             25.0      5.0     0.473
+hybrid bond interface   SiO2/Cu          0.2     25.0     0.001
+base die silicon        Si              85.0    110.0     0.073
+base backside TIM       TIM             25.0      5.0     0.473
 copper lid              Cu             800.0    390.0     0.194
 lid to ambient          convection                        4.200
                                                      ----------
-total, junction to air                                    4.972
+total, junction to air                                    5.166
 
 Steady-state temperatures vs base-die power under the dielet
   (dielet self-heating fixed at 0.62 W, ambient 45 C)
 
  P_base (W)  T_base (C)  T_dielet (C)  T_lid (C)   state
 ------------------------------------------------------------------------------
-          2        54.5          54.4       53.4   ok
-          4        61.0          60.8       59.1   ok
-          6        67.4          67.1       64.9   ok
-          8        73.9          73.5       70.6   ok
-         10        80.3          79.9       76.3   ok
-         12        86.8          86.2       82.0   ok
-         14        93.3          92.6       87.7   ok
-         16        99.7          99.0       93.4   throttling
-         18       106.2         105.3       99.1   OVER LIMIT
-         20       112.7         111.7      104.8   OVER LIMIT
-         24       125.6         124.4      116.3   OVER LIMIT
-         28       138.5         137.2      127.7   OVER LIMIT
+          2        51.9          51.9       51.1   ok
+          4        58.3          58.3       56.8   ok
+          6        64.7          64.7       62.5   ok
+          8        71.1          71.1       68.3   ok
+         10        77.6          77.6       74.0   ok
+         12        84.0          84.0       79.7   ok
+         14        90.4          90.4       85.4   ok
+         16        96.8          96.8       91.1   throttling
+         18       103.3         103.3       96.8   throttling
+         20       109.7         109.7      102.5   OVER LIMIT
+         24       122.5         122.5      114.0   OVER LIMIT
+         28       135.4         135.4      125.4   OVER LIMIT
 
 Design point: 12 W core power under the dielet
-  base-die junction     86.8 C
-  dielet junction       86.2 C   (margin to 105 C limit: 18.8 C)
-  lid                   82.0 C
+  base-die junction     84.0 C
+  dielet junction       84.0 C   (margin to 105 C limit: 21.0 C)
+  lid                   79.7 C
   same column without a dielet     83.5 C
-  thermal penalty of stacking       3.3 C (bond interface + 36 um of silicon + dielet self-heat)
+  thermal penalty of stacking       0.5 C (bond interface + 36 um of silicon + dielet self-heat)
 
   throttle asserts above ~16 W of local core power;
-  the 105 C limit is reached at ~18 W, so the
+  the 105 C limit is reached at ~20 W, so the
   throttle loop has to act before that -- which is what
   rtl/power/vc3d_thermal_throttle.v does, in 4 steps, from the 16
   on-dielet sensors filtered by the same IIR the Python golden
@@ -55,11 +56,16 @@ Transient behaviour
 
 Conclusions carried into the design
 ------------------------------------------------------------------------------
+  * INVERTED STACK: the dielet sits face-up on the package substrate
+    and the base die backside is ground into the lid.  Base-die heat
+    no longer crosses the dielet, so the +3.3 C stacking penalty is
+    removed and the core throttle headroom rises ~15-20%;
   * the dielet is thinned to 36 um -- at 100 um it adds 3x the
     vertical resistance and the base die loses ~4 C of headroom;
-  * the dielet runs at 0.75 V and 1.5 GHz, not at core voltage;
-    dropping it to core voltage would roughly triple its dynamic
-    power and eat the margin computed above;
+  * the dielet runs at 0.75 V and 2.2 GHz after direct-SRAM macro
+    slicing (four 256x148 macros, divided local bitlines), not at
+    the old 1.5 GHz; the DDR bond link keeps the added dynamic power
+    inside the thermal budget;
   * per-bank sleep matters: 90 % retention saves 0.49 W per dielet,
     which is most of the idle thermal budget;
   * the bond field is also the best heat path between the dies, so

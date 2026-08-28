@@ -40,13 +40,16 @@
 `include "vc3d_defines.vh"
 
 module hnf_vcache3d_adapter #(
-    parameter INDEX_WIDTH = 15,
-    parameter WAY_NUM     = 16,
-    parameter LINE_WIDTH  = 512,
-    parameter ID_W        = 12,
-    parameter CH_NUM      = 8,
-    parameter PHYS_LANE   = 172,
-    parameter SLICE_ID    = 0
+    parameter INDEX_WIDTH    = 15,
+    parameter WAY_NUM        = 16,
+    parameter LINE_WIDTH     = 512,
+    parameter DAT_WIDTH      = 512,      // native 512-bit CHI DAT
+    parameter FLIT_WIDTH     = 256,      // legacy CHI DAT flit
+    parameter FLITS_PER_LINE = 2,        // 2 legacy flits per 64 B line
+    parameter ID_W           = 12,
+    parameter CH_NUM         = 8,
+    parameter PHYS_LANE      = 172,
+    parameter SLICE_ID       = 0
 ) (
     input  wire                        clk,
     input  wire                        rst,
@@ -57,6 +60,20 @@ module hnf_vcache3d_adapter #(
     input  wire [WAY_NUM-1:0]          l3_wr_ways_q,
     input  wire [LINE_WIDTH-1:0]       l3_wr_data_q,
     output reg  [LINE_WIDTH-1:0]       l3_rd_data_q,
+
+    // ---- native 512-bit CHI DAT interface (new) ------------------------------
+    // In native 512-bit mode a 64 B line arrives/departs in one cycle.  When
+    // the NoC still presents 256-bit flits, the adapter packs/unpacks two flits
+    // into one 512-bit line on the same port, so HN-F sees one access per line.
+    input  wire                        hnf_dat_512_mode,
+    input  wire                        hnf_dat_lo_valid,
+    input  wire                        hnf_dat_hi_valid,
+    input  wire [FLIT_WIDTH-1:0]       hnf_dat_lo,
+    input  wire [FLIT_WIDTH-1:0]       hnf_dat_hi,
+    input  wire [DAT_WIDTH-1:0]        hnf_dat_hi_wide,
+    output reg                         hnf_dat_512_valid,
+    output reg  [FLIT_WIDTH-1:0]       hnf_dat_lo_out,
+    output reg  [FLIT_WIDTH-1:0]       hnf_dat_hi_out,
 
     // ---- flow control and error reporting (new) ------------------------------
     output wire                        l3_stall_req,
@@ -140,6 +157,13 @@ module hnf_vcache3d_adapter #(
 
     wire stacked_way = (way_sel >= `VC3D_BASE_WAY_NUM);
 
+    // Pack the native 512-bit line (or two 256-bit flits) into one line access.
+    wire [DAT_WIDTH-1:0] wr_data_512 =
+        hnf_dat_512_mode ? (hnf_dat_lo_valid && hnf_dat_hi_valid
+                            ? {hnf_dat_hi, hnf_dat_lo}
+                            : hnf_dat_hi_wide)
+                         : l3_wr_data_q;
+
     assign l3_stall_req = busy;
 
     always @(posedge clk or posedge rst) begin
@@ -160,7 +184,7 @@ module hnf_vcache3d_adapter #(
                                          : `VC3D_OPC_DIRECT_READ;
                 req_addr_r   <= {direct_addr[47:10], way_sel, 6'd0};
                 req_id_r     <= {8'd0, way_sel};
-                req_wdata_r  <= l3_wr_data_q;
+                req_wdata_r  <= wr_data_512[DAT_WIDTH-1:0];
                 way_q        <= way_sel;
                 busy         <= 1'b1;
             end
@@ -172,18 +196,29 @@ module hnf_vcache3d_adapter #(
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            l3_rd_data_q  <= {LINE_WIDTH{1'b0}};
-            l3_rd_valid_q <= 1'b0;
-            l3_ce         <= 1'b0;
-            l3_ue         <= 1'b0;
-            l3_poison     <= 1'b0;
+            l3_rd_data_q   <= {LINE_WIDTH{1'b0}};
+            l3_rd_valid_q  <= 1'b0;
+            l3_ce          <= 1'b0;
+            l3_ue          <= 1'b0;
+            l3_poison      <= 1'b0;
+            hnf_dat_512_valid <= 1'b0;
+            hnf_dat_lo_out <= {FLIT_WIDTH{1'b0}};
+            hnf_dat_hi_out <= {FLIT_WIDTH{1'b0}};
         end
         else begin
-            l3_rd_valid_q <= rsp_valid_w;
-            l3_ce         <= rsp_valid_w & rsp_ce_w;
-            l3_ue         <= rsp_valid_w & rsp_ue_w;
-            l3_poison     <= rsp_valid_w & rsp_poison_w;
-            if (rsp_valid_w) l3_rd_data_q <= rsp_data_w;
+            l3_rd_valid_q   <= rsp_valid_w;
+            l3_ce           <= rsp_valid_w & rsp_ce_w;
+            l3_ue           <= rsp_valid_w & rsp_ue_w;
+            l3_poison       <= rsp_valid_w & rsp_poison_w;
+            if (rsp_valid_w) begin
+                l3_rd_data_q   <= rsp_data_w;
+                hnf_dat_512_valid <= 1'b1;
+                hnf_dat_lo_out <= rsp_data_w[FLIT_WIDTH-1:0];
+                hnf_dat_hi_out <= rsp_data_w[DAT_WIDTH-1:FLIT_WIDTH];
+            end
+            else begin
+                hnf_dat_512_valid <= 1'b0;
+            end
         end
     end
 

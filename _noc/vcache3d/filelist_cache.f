@@ -3,9 +3,14 @@
 +incdir+include
 rtl/stack/vc3d_bond_channel.v
 rtl/stack/vc3d_bond_crc16.v
+rtl/stack/vc3d_bond_ddr_gearbox.v
 rtl/stack/vc3d_bond_lane.v
 rtl/stack/vc3d_bond_link.v
 rtl/stack/vc3d_stack_bank_array.v
 rtl/stack/vc3d_stack_die_top.v
+rtl/stack/vc3d_stack_macro_bank.v
+rtl/stack/vc3d_stack_macro_cell.v
+rtl/stack/vc3d_stack_macro_slice_array.v
+rtl/stack/vc3d_stack_macro_subarray.v
 rtl/stack/vc3d_stack_subarray.v
 rtl/power/vc3d_thermal_sensor.v

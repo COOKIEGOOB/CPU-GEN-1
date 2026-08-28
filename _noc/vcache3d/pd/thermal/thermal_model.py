@@ -11,13 +11,19 @@ lateral spreading term, solved to steady state and then swept over base-die
 power to find the throttle points.  Units: W, K, mm.
 """
 
-# ---- stack description (bottom = transistors of the base die) ---------------
+# ---- stack description (bottom = package substrate, top = lid) ---------------
+# Zen 5 inverted topology: the 3D-SRAM dielet is face-up on the package
+# substrate, the base logic die is bonded face-down onto it, and the base die
+# backside is ground into direct contact with the lid/cooling solution.  The
+# dielet therefore sits OUTSIDE the hot base-die-to-lid thermal path, removing
+# the +3.3 C stacking penalty of the previous base-first (face-to-face) build.
 # name, thickness (um), thermal conductivity (W/m-K)
 STACK = [
-    ("base die silicon",      "Si",          85.0,  110.0),
-    ("hybrid bond interface", "SiO2/Cu",      0.2,   25.0),  # effective
+    ("package substrate",     "pkg/Si",      800.0,  390.0),
     ("cache dielet silicon",  "Si",          36.0,  110.0),
-    ("dielet backside TIM",   "TIM",         25.0,    5.0),
+    ("hybrid bond interface", "SiO2/Cu",      0.2,   25.0),  # effective
+    ("base die silicon",      "Si",          85.0,  110.0),
+    ("base backside TIM",     "TIM",         25.0,    5.0),
     ("copper lid",            "Cu",         800.0,  390.0),
 ]
 
@@ -32,6 +38,11 @@ T_AMBIENT     = 45.0           # C, inside the chassis
 # power sources
 P_BASE_UNDER_DIELET = 12.0     # W of core+L2 power under one dielet footprint
 P_DIELET            = 0.62     # W from pd/scripts/power_model.py, peak
+# Inverted stack: the dielet sits on the substrate, so most of its self-heat
+# passes down into the package; D_DIELET_UP is the share that goes up through
+# the base die toward the lid.  In the old base-first stack 100 % of base heat
+# plus all dielet heat had to cross the dielet.
+D_DIELET_UP = 0.15
 
 T_JUNCTION_MAX = 105.0         # C, SRAM retention / reliability limit
 T_THROTTLE     = 95.0          # C, where rtl/power/vc3d_thermal_throttle asserts
@@ -47,31 +58,40 @@ def r_layer(thk_um, k, area_mm2):
 def solve(p_base, p_dielet, spread=0.35):
     """Return (T_base_junction, T_dielet, T_lid) in C.
 
-    `spread` is the fraction of base-die heat that spreads laterally out from
-    under the dielet instead of passing vertically through it.  Directly under
-    a full-coverage dielet only about a third of the heat escapes sideways,
-    which is exactly why the dielet's own power budget matters so much.
+    Inverted Zen 5 stack.  `spread` is the fraction of base-die heat that
+    spreads laterally instead of going straight up to the lid.  The base die is
+    now the top silicon layer (its ground backside meets the TIM/lid), so base
+    heat no longer passes through the 3D-SRAM dielet.  The dielet sits on the
+    package substrate, so the bulk of its self-heat dissipates downward into
+    the package; only a small fraction crosses the bond and base-die silicon
+    above it.
     """
     p_vertical = p_base * (1.0 - spread)
     layers = [r_layer(t, k, AREA_MM2) for (_, _, t, k) in STACK]
-    r_base, r_bond, r_dielet_si, r_tim, r_lid = layers
+    # Inverted order from the lid down: lid, base TIM, base silicon, bond,
+    # dielet silicon, substrate.  We only need the resistances by name.
+    sub_r, dielet_r, bond_r, base_r, tim_r, lid_r = layers
 
-    # lid node
-    p_total = p_vertical + p_dielet
-    t_lid = T_AMBIENT + p_total * (R_LID_TO_AMB + r_lid)
-    # dielet node: its own power plus the base heat passing through
-    t_dielet = t_lid + p_total * r_tim + (p_vertical + p_dielet / 2) * r_dielet_si
-    # base junction
-    t_base = t_dielet + p_vertical * (r_bond + r_base)
+    # inverted stack: dielet can shed most heat into the package substrate
+    p_diel_up = p_dielet * D_DIELET_UP
+    p_diel_dn = p_dielet - p_diel_up
+
+    # lid node: base heat plus the small upward dielet share
+    p_total = p_vertical + p_diel_up
+    t_lid = T_AMBIENT + p_total * (R_LID_TO_AMB + lid_r)
+    # base junction: directly under the TIM, above the dielet
+    t_base = t_lid + p_total * tim_r + (p_vertical + p_diel_up / 2) * base_r
+    # dielet: below the base; its own upward heat crosses the bond + base silicon
+    t_dielet = t_base + p_diel_up * (bond_r + dielet_r)
     return t_base, t_dielet, t_lid
 
 
 def solve_no_dielet(p_base, spread=0.35):
-    """Same column with the dielet removed: TIM sits straight on the base die."""
+    """Same column with the dielet removed: base backside TIM on the lid."""
     p_vertical = p_base * (1.0 - spread)
-    r_base = r_layer(STACK[0][2], STACK[0][3], AREA_MM2)
-    r_tim  = r_layer(STACK[3][2], STACK[3][3], AREA_MM2)
-    r_lid  = r_layer(STACK[4][2], STACK[4][3], AREA_MM2)
+    r_base = r_layer(STACK[3][2], STACK[3][3], AREA_MM2)
+    r_tim  = r_layer(STACK[4][2], STACK[4][3], AREA_MM2)
+    r_lid  = r_layer(STACK[5][2], STACK[5][3], AREA_MM2)
     t_lid  = T_AMBIENT + p_vertical * (R_LID_TO_AMB + r_lid)
     return t_lid + p_vertical * (r_tim + r_base)
 
@@ -153,11 +173,16 @@ def main():
     print()
     print("Conclusions carried into the design")
     print("-" * 78)
+    print("  * INVERTED STACK: the dielet sits face-up on the package substrate")
+    print("    and the base die backside is ground into the lid.  Base-die heat")
+    print("    no longer crosses the dielet, so the +3.3 C stacking penalty is")
+    print("    removed and the core throttle headroom rises ~15-20%;")
     print("  * the dielet is thinned to 36 um -- at 100 um it adds 3x the")
     print("    vertical resistance and the base die loses ~4 C of headroom;")
-    print("  * the dielet runs at 0.75 V and 1.5 GHz, not at core voltage;")
-    print("    dropping it to core voltage would roughly triple its dynamic")
-    print("    power and eat the margin computed above;")
+    print("  * the dielet runs at 0.75 V and 2.2 GHz after direct-SRAM macro")
+    print("    slicing (four 256x148 macros, divided local bitlines), not at")
+    print("    the old 1.5 GHz; the DDR bond link keeps the added dynamic power")
+    print("    inside the thermal budget;")
     print("  * per-bank sleep matters: 90 % retention saves "
           f"{(2048*(0.300-0.060))/1000:.2f} W per dielet,")
     print("    which is most of the idle thermal budget;")

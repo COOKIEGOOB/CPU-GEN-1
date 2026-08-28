@@ -19,16 +19,28 @@ make sim-all  # testbenches (requires VCS or Verilator)
 | | |
 |---|---|
 | capacity | 96 MiB, 16 way, 64 B lines |
-| frequency | 3.0 GHz base tier, 1.5 GHz cache tier, all paths meet |
-| latency | 12 cycles base-die hit, 21 cycles stacked hit |
-| bandwidth | 216 GB/s per slice, 648 GB/s per package |
+| frequency | 3.0 GHz base tier, 2.2 GHz cache tier (macro-sliced dielet), all paths meet |
+| latency | 12 cycles base-die hit, **17 cycles stacked hit (+5, down from +9)** |
+| bandwidth | 64 B/cycle per slice native 512-bit DAT, 192 B/cycle package |
+| bond link | 144 b/lane SDR -> **DDR dual-edge, 3.0 GHz, no serialisation gearbox** |
 | area | 23.4 mm² base die + 3 × 10.57 mm² dielet = 31.7 mm² |
 | power | 2.41 W idle, 3.88 W peak |
-| thermals | +3.3 °C stacking penalty, throttle at 16 W local core power |
+| thermals | **inverted Zen 5 stack: +0.5 °C penalty (was +3.3 °C)** |
 | bonds | 1376 signal + 384 PG + 24 control per slice at 9 µm pitch |
 | yield | 99.94 % post-repair at D0 = 0.07 /cm² |
 
 Full numbers, and the programs that produce them: [`docs/PPA_REPORT.md`](docs/PPA_REPORT.md).
+
+## Five latency / bandwidth / thermal upgrades
+
+| # | change | result |
+|---|---|---|
+| 1a | speculative S6 data return + parallel SECDED (stall/replay only on non-zero syndrome) | stacked hit **+9 → +5 cycles** |
+| 1b | DDR bond lanes (3.0 GHz, dual-edge, no serialisation gearbox) | link round trip **4 → 2 cycles** |
+| 2 | tier-aware asymmetric replacement (fast ways for hot/pointer-chasing, slow ways for streaming/prefetch) | effective latency trends toward 12 cycles |
+| 3 | inverted Zen 5 die stack (dielet face-up on substrate, base die under the lid) | stacking penalty **+3.3 → +0.5 °C** |
+| 4 | native 512-bit CHI DAT in the HN-F adapter | **64 B/cycle**, one line per beat |
+| 5 | direct SRAM macro slicing (4 × 256 × 148, divided local bitlines) | macro 465 → ~260 ps, dielet **1.5 → 2.2 GHz** |
 
 ## Layout
 

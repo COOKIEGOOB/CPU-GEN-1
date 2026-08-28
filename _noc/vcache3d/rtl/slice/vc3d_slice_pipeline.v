@@ -57,6 +57,17 @@ module vc3d_slice_pipeline #(
     output reg                rsp_ue,
     output reg                rsp_poison,
 
+    // ---- speculative/parallel-ECC data return ---------------------------------
+    output reg                rsp_spec,
+    output reg                rsp_parity_ok,
+    output reg                replay_valid,
+    output reg  [ID_W-1:0]    replay_id,
+    output reg  [47:0]        replay_addr,
+    output reg  [511:0]       replay_data,
+    output reg                replay_ce,
+    output reg                replay_ue,
+    output reg                replay_poison,
+
     // ---- miss / fill interface to the next level --------------------------------
     output reg                miss_valid,
     input  wire               miss_ready,
@@ -74,6 +85,8 @@ module vc3d_slice_pipeline #(
     output reg                tag_lookup_valid,
     output reg  [SET_W-1:0]   tag_lookup_set,
     output reg  [TAG_W-1:0]   tag_lookup_tag,
+    output reg  [3:0]         tag_lookup_qos,
+    output reg                tag_lookup_prefetch,
     input  wire               tag_lookup_done,
     input  wire               tag_hit,
     input  wire [WAY_W-1:0]   tag_hit_way,
@@ -185,6 +198,8 @@ module vc3d_slice_pipeline #(
             tag_lookup_valid <= 1'b0;
             tag_lookup_set   <= {SET_W{1'b0}};
             tag_lookup_tag   <= {TAG_W{1'b0}};
+            tag_lookup_qos   <= 4'd0;
+            tag_lookup_prefetch <= 1'b0;
             mnt_req_ready    <= 1'b0;
         end
         else begin
@@ -208,6 +223,8 @@ module vc3d_slice_pipeline #(
                 tag_lookup_valid <= ~req_is_direct;
                 tag_lookup_set   <= req_set;
                 tag_lookup_tag   <= req_tag;
+                tag_lookup_qos   <= req_qos;
+                tag_lookup_prefetch <= (req_opcode == `VC3D_OPC_PREFETCH);
             end
             else if (mnt_win) begin
                 s1_valid      <= 1'b1;
@@ -343,16 +360,57 @@ module vc3d_slice_pipeline #(
         .written_o  (dec_written)
     );
 
+    // -------------------------------------------------------------------------
+    // Speculative / parallel-ECC data path.
+    //
+    // The raw line is returned speculatively at the S6 mux stage together with
+    // a one-cycle parity/SECDED syndrome flag.  The full four-way SECDED
+    // corrector is still built on the base die and runs in parallel; it only
+    // stalls/replays an access whose syndrome is non-zero (well under one in a
+    // million accesses on healthy silicon).  This pulls the stacked latency
+    // down from S7+S8 serialisation to an S6 fast return.
+    // -------------------------------------------------------------------------
+    wire [35:0] fast_syn;
+    wire [3:0]  fast_poison;
+    genvar fg;
+    generate
+        for (fg = 0; fg < 4; fg = fg + 1) begin : g_fast_syn
+            wire [143:0] fword = coded_rd[fg*144 +: 144];
+            vc3d_secded_syn_128 u_fsyn (
+                .data_i     (fword[127:0]),
+                .check_i    (fword[136:128]),
+                .syndrome_o (fast_syn[fg*9 +: 9])
+            );
+            assign fast_poison[fg] = fword[137];
+        end
+    endgenerate
+
+    // Full SECDED syndrome is zero (and no poison / link error) => the raw
+    // line itself is safe to return speculatively.  This is the common case.
+    wire fast_ok = `VC3D_SPEC_RETURN_ENABLE &&
+                   (|fast_syn == 1'b0) && (|fast_poison == 1'b0) &&
+                   (~stk_rsp_link_err);
+
+    // Extract the raw 512-bit data payload from the 576-bit coded format
+    // (128 data bits per subline, ECC/poison/metadata interleaved every 144).
+    wire [511:0] raw_line = {coded_rd[559 -: 128],
+                             coded_rd[415 -: 128],
+                             coded_rd[271 -: 128],
+                             coded_rd[127 -: 128]};
+
     // the S3 attributes must be delayed to meet the decoded data
     reg              s5_valid, s5_is_mnt, s5_hit, s5_dirty, s5_from_stack, s5_link_err;
+    reg              s5_fast_ok;
     reg [ID_W-1:0]   s5_id;
     reg [47:0]       s5_addr;
     reg [WAY_W-1:0]  s5_way;
+    reg [511:0]      s5_raw_line;
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             s5_valid <= 1'b0; s5_is_mnt <= 1'b0; s5_hit <= 1'b0; s5_dirty <= 1'b0;
-            s5_from_stack <= 1'b0; s5_link_err <= 1'b0;
+            s5_from_stack <= 1'b0; s5_link_err <= 1'b0; s5_fast_ok <= 1'b0;
             s5_id <= {ID_W{1'b0}}; s5_addr <= 48'd0; s5_way <= {WAY_W{1'b0}};
+            s5_raw_line <= 512'd0;
         end
         else begin
             s5_valid      <= rd_valid;
@@ -361,11 +419,15 @@ module vc3d_slice_pipeline #(
             s5_dirty      <= s3_dirty;
             s5_from_stack <= s3_from_stack;
             s5_link_err   <= stk_rsp_link_err;
+            s5_fast_ok    <= fast_ok;
             s5_id         <= s3_id;
             s5_addr       <= s3_addr;
             s5_way        <= s3_way;
+            s5_raw_line   <= raw_line;
         end
     end
+
+    reg fast_rsp_sent;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -376,6 +438,15 @@ module vc3d_slice_pipeline #(
             rsp_ce             <= 1'b0;
             rsp_ue             <= 1'b0;
             rsp_poison         <= 1'b0;
+            rsp_spec           <= 1'b0;
+            rsp_parity_ok      <= 1'b0;
+            replay_valid       <= 1'b0;
+            replay_id          <= {ID_W{1'b0}};
+            replay_addr        <= 48'd0;
+            replay_data        <= 512'd0;
+            replay_ce          <= 1'b0;
+            replay_ue          <= 1'b0;
+            replay_poison      <= 1'b0;
             mnt_rsp_valid      <= 1'b0;
             mnt_rdata          <= 512'd0;
             mnt_rsp_ce         <= 1'b0;
@@ -389,12 +460,34 @@ module vc3d_slice_pipeline #(
             err_way            <= 4'd0;
             err_syndrome       <= 36'd0;
             err_dirty          <= 1'b0;
+            fast_rsp_sent      <= 1'b0;
         end
         else begin
             rsp_valid     <= 1'b0;
+            rsp_spec      <= 1'b0;
+            rsp_parity_ok <= 1'b0;
+            replay_valid  <= 1'b0;
             mnt_rsp_valid <= 1'b0;
             err_push      <= 1'b0;
 
+            // ---------- speculative S6 return ---------------------------------
+            // Raw data + a 1-cycle syndrome/parity flag.  Only the (overwhelming)
+            // zero-syndrome case takes this path; anything else waits for the
+            // full parallel SECDED corrector and triggers a replay below.
+            if (s5_valid && !s5_is_mnt && s5_fast_ok && !fast_rsp_sent) begin
+                rsp_valid      <= 1'b1;
+                rsp_spec       <= 1'b1;
+                rsp_parity_ok  <= 1'b1;
+                rsp_id         <= s5_id;
+                rsp_data       <= s5_raw_line;
+                rsp_hit        <= s5_hit;
+                rsp_ce         <= 1'b0;
+                rsp_ue         <= 1'b0;
+                rsp_poison     <= 1'b0;
+                fast_rsp_sent  <= 1'b1;
+            end
+
+            // ---------- full parallel-SECDED path (only on non-zero syndrome) --
             if (dec_valid) begin
                 if (s5_is_mnt) begin
                     mnt_rsp_valid      <= 1'b1;
@@ -403,6 +496,22 @@ module vc3d_slice_pipeline #(
                     mnt_rsp_ue         <= dec_ue;
                     mnt_rsp_syndrome   <= dec_syndrome;
                     mnt_rsp_line_valid <= |dec_written;
+                end
+                else if (fast_rsp_sent) begin
+                    // The speculative response was already returned; the
+                    // parallel corrector now publishes the corrected line only
+                    // when it found a real error (rare).  Otherwise it just
+                    // closes the speculative window.
+                    fast_rsp_sent <= 1'b0;
+                    if (dec_ce || dec_ue || s5_link_err) begin
+                        replay_valid  <= 1'b1;
+                        replay_id     <= s5_id;
+                        replay_addr   <= s5_addr;
+                        replay_data   <= dec_line;
+                        replay_ce     <= dec_ce;
+                        replay_ue     <= dec_ue;
+                        replay_poison <= dec_poison;
+                    end
                 end
                 else begin
                     rsp_valid  <= 1'b1;

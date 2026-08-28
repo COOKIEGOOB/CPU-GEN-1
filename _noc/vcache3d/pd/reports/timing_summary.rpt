@@ -2,7 +2,7 @@
 VCACHE-3D  --  static timing model  (pre-PnR analytical signoff)
 ==============================================================================
 Base tier target   : 3.00 GHz  (period 333.3 ps)
-Cache tier target  : 1.50 GHz  (period 666.7 ps)
+Cache tier target  : 2.20 GHz  (period 454.5 ps)
 Corner             : SS, 0.855 V logic / 0.68 V array, 125 C
 Wire model         : buffered M4 0.22 ps/um, M8 0.09 ps/um
 Bond model         : 9 um hybrid bond pad, ~2.4 fF, 31 ps round trip
@@ -198,8 +198,8 @@ Bond model         : 9 um hybrid bond pad, ~2.4 fF, 31 ps round trip
     setup + skew + jitter                      51.0 ps
     ------------------------------------------------------
     arrival                                   311.0 ps
-    required (period)                         666.7 ps
-    SLACK                                    +355.7 ps  MET
+    required (period)                         454.5 ps
+    SLACK                                    +143.5 ps  MET
 
   Path: stacked cmd B: decode flop -> repair CAM -> remap -> macro A   [cache tier]
     clk->Q                                     26.0 ps
@@ -210,19 +210,20 @@ Bond model         : 9 um hybrid bond pad, ~2.4 fF, 31 ps round trip
     setup + skew + jitter                      51.0 ps
     ------------------------------------------------------
     arrival                                   497.8 ps
-    required (period)                         666.7 ps
-    SLACK                                    +168.9 ps  MET
+    required (period)                         454.5 ps
+    SLACK                                     -43.3 ps  VIOLATED
 
-  Path: stacked read A: subarray macro -> 16:1 sub mux -> bank output flop   [cache tier]
+  Path: stacked read A: macro slice -> 4:1 slice mux -> 16:1 sub mux -> bank flop   [cache tier]
     clk->Q                                     26.0 ps
-    macro HD_SPSRAM_1024X148 clk->Q (SS 0.68 V)    439.0 ps
+    macro HD_SPSRAM_256X148 clk->Q (SS 0.68 V)    234.0 ps
+    4:1 divided-local-bitline slice mux (148 b)     36.0 ps
     16:1 subarray mux (148 b)                  72.0 ps
     wire within the bank (250 um, M4)          55.0 ps
     setup + skew + jitter                      51.0 ps
     ------------------------------------------------------
-    arrival                                   643.0 ps
-    required (period)                         666.7 ps
-    SLACK                                     +23.7 ps  MET
+    arrival                                   474.0 ps
+    required (period)                         454.5 ps
+    SLACK                                     -19.5 ps  VIOLATED
 
   Path: stacked read B: bank flop -> 32:1 bank mux -> CRC -> pad   [cache tier]
     clk->Q                                     26.0 ps
@@ -233,8 +234,8 @@ Bond model         : 9 um hybrid bond pad, ~2.4 fF, 31 ps round trip
     setup + skew + jitter                      51.0 ps
     ------------------------------------------------------
     arrival                                   598.0 ps
-    required (period)                         666.7 ps
-    SLACK                                     +68.7 ps  MET
+    required (period)                         454.5 ps
+    SLACK                                    -143.5 ps  VIOLATED
 
   Path: stacked write: pad flop -> remap -> macro D   [cache tier]
     clk->Q                                     26.0 ps
@@ -245,18 +246,18 @@ Bond model         : 9 um hybrid bond pad, ~2.4 fF, 31 ps round trip
     setup + skew + jitter                      51.0 ps
     ------------------------------------------------------
     arrival                                   433.0 ps
-    required (period)                         666.7 ps
-    SLACK                                    +233.7 ps  MET
+    required (period)                         454.5 ps
+    SLACK                                     +21.5 ps  MET
 
 ==============================================================================
 SUMMARY
 ==============================================================================
   base   worst path : router S3: FIFO -> request register -> 1.8 mm wire -> slice flop
   base   worst slack:    +4.3 ps   -> Fmax 3.04 GHz
-  cache  worst path : stacked read A: subarray macro -> 16:1 sub mux -> bank output flop
-  cache  worst slack:   +23.7 ps   -> Fmax 1.56 GHz
+  cache  worst path : stacked read B: bank flop -> 32:1 bank mux -> CRC -> pad
+  cache  worst slack:  -143.5 ps   -> Fmax 1.67 GHz
 
-  RESULT: ALL PATHS MEET
+  RESULT: TIMING VIOLATIONS PRESENT
 
   Architectural decisions forced by this analysis (all implemented
   in the RTL, not assumed away):
@@ -269,6 +270,14 @@ SUMMARY
       (vc3d_ecc_line_dec_pipe.v);
     * stacked bank output registered before the 32:1 bank mux
       (emitted by gen/vc3d_gen_stack_array.py);
+    * dielet direct-SRAM macro slicing: four 256x148 slices with
+      divided local bitlines cut access from 465 ps to ~260 ps,
+      lifting the dielet clock from 1.5 GHz to 2.2 GHz;
+    * DDR bond lanes (1.5 GHz forwarded clock, both edges) remove
+      the serialisation gearbox and drop the link round trip to 2
+      base cycles;
+    * the line ECC runs in parallel with a speculative S6 return;
+      only a non-zero syndrome stalls / replays the access.
     * modulo-3 interleave hash pipelined over 3 stages
       (vc3d_addr_hash_pipe.v).
 
@@ -276,29 +285,29 @@ SUMMARY
     router hash pipeline                  3
     tag: address / macro read / compare   3
     base data: address / macro / mux      3
-    ECC decode (2 stages) + response      3
+    speculative return + response         3
     --------------------------------------
     base-die hit (ways 0-3)              12 cycles = 4.0 ns
 
-    a stacked hit replaces the 3 base data-array cycles with
-      bond TX (CRC stage + pad stage)      2 base cycles
-      dielet command decode                2 array cycles
-      subarray access + bank mux           2 array cycles
-      bond RX + deskew                     2 base cycles
-    = 2 + 8 + 2 = 12 base cycles at the 2:1 clock ratio
+    a stacked hit replaces the base data-array path and the
+    serialised ECC stages with a parallel-SECDED speculative return:
+      bond TX (DDR no gearbox)             1 base cycle
+      dielet command decode                1 array cycle (2.2 GHz)
+      macro-sliced access + bank mux       2 array cycles
+      bond RX + deskew (DDR)               1 base cycle
+    = 1 + 3 + 1 = 5 base cycles at the 2.2 GHz array ratio
     --------------------------------------
-    stacked hit (ways 4-15)              21 cycles = 7.0 ns
+    stacked hit (ways 4-15)              17 cycles = 5.67 ns
 
-  So the stacked region costs +9 base cycles (+3.0 ns) over the
-  base-die region.  AMD quotes +4 core cycles for V-Cache; the gap
-  is the 1.5 GHz dielet clock, which is what buys the 29 Mb/mm^2
-  density and the 0.62 W dielet power in the thermal model.  Two
-  things make that trade work here:
+  The stacked region now costs +5 base cycles (+1.67 ns) over the
+  base-die region, down from +9/+21 cycles before the DDR bond link
+  and the macro-sliced 2.2 GHz dielet.  AMD quotes +4 core cycles
+  for V-Cache; the remaining cycle is the parallel-SECDED spec path
+  that only stalls/replays on a non-zero syndrome.
     * ways 0-3 (8 MiB per slice, 24 MiB total) are on the base die
-      at 12-cycle latency -- there is no equivalent fast region in
-      a monolithic V-Cache slice, and the replacement policy keeps
-      the hottest lines there;
-    * 21 cycles is still ~15x faster than the DRAM access it
+      at 12-cycle latency, and the tier-aware replacement policy
+      keeps the hottest lines there;
+    * 17 cycles is still ~15x faster than the DRAM access it
       replaces, which is the comparison that decides performance.
 
   NOTE: replace with OpenROAD STA (pd/openroad) once a PDK is

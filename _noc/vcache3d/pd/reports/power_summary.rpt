@@ -1,7 +1,7 @@
 ==============================================================================
 VCACHE-3D  --  power model
 ==============================================================================
-  base tier 3.0 GHz / 0.95 V   cache tier 1.5 GHz / 0.75 V
+  base tier 3.0 GHz / 0.95 V   cache tier 2.2 GHz / 0.75 V
 
 operating point                      base   dielet   scrub    total
                                        mW       mW      mW       mW

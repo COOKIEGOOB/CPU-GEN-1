@@ -29,7 +29,8 @@ module vc3d_bond_link #(
     parameter PAYLOAD_W   = 144,
     parameter CMD_W       = 4,
     parameter SIGNAL_LANE = 164,
-    parameter PHYS_LANE   = 172
+    parameter PHYS_LANE   = 172,
+    parameter DDR         = `VC3D_BOND_DDR_ENABLE
 ) (
     input  wire                          clk,
     input  wire                          rst,
@@ -107,7 +108,8 @@ module vc3d_bond_link #(
                 .CMD_W       (CMD_W),
                 .SIGNAL_LANE (SIGNAL_LANE),
                 .SPARE_LANE  (PHYS_LANE - SIGNAL_LANE),
-                .PHYS_LANE   (PHYS_LANE)
+                .PHYS_LANE   (PHYS_LANE),
+                .DDR         (DDR)
             ) u_channel (
                 .clk              (clk),
                 .rst              (rst),
