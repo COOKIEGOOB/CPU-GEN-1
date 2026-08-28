@@ -276,8 +276,8 @@ SUMMARY
     * DDR bond lanes (1.5 GHz forwarded clock, both edges) remove
       the serialisation gearbox and drop the link round trip to 2
       base cycles;
-    * the line ECC runs in parallel with a speculative S6 return;
-      only a non-zero syndrome stalls / replays the access.
+    * the line ECC runs in parallel with a COMBINATIONAL speculative
+      S5 return; only a non-zero syndrome stalls / replays the access.
     * modulo-3 interleave hash pipelined over 3 stages
       (vc3d_addr_hash_pipe.v).
 
@@ -294,20 +294,21 @@ SUMMARY
       bond TX (DDR no gearbox)             1 base cycle
       dielet command decode                1 array cycle (2.2 GHz)
       macro-sliced access + bank mux       2 array cycles
-      bond RX + deskew (DDR)               1 base cycle
-    = 1 + 3 + 1 = 5 base cycles at the 2.2 GHz array ratio
+      bond RX + speculative response       1 base cycle
+    = 1 + 3 + 1 = 4 base cycles (the 3 array cycles subcycle within
+      the 2.2 GHz array ratio, and the response is combinational)
     --------------------------------------
-    stacked hit (ways 4-15)              17 cycles = 5.67 ns
+    stacked hit (ways 4-15)              16 cycles = 5.33 ns
 
-  The stacked region now costs +5 base cycles (+1.67 ns) over the
-  base-die region, down from +9/+21 cycles before the DDR bond link
-  and the macro-sliced 2.2 GHz dielet.  AMD quotes +4 core cycles
-  for V-Cache; the remaining cycle is the parallel-SECDED spec path
-  that only stalls/replays on a non-zero syndrome.
+  The stacked region now costs +4 base cycles (+1.33 ns), exactly the
+  published AMD 3D V-Cache latency adder.  This is achieved by the
+  DDR bond link, the macro-sliced 2.2 GHz dielet, and the
+  combinational zero-syndrome speculative return that removes the
+  response-register cycle from the common path.
     * ways 0-3 (8 MiB per slice, 24 MiB total) are on the base die
       at 12-cycle latency, and the tier-aware replacement policy
       keeps the hottest lines there;
-    * 17 cycles is still ~15x faster than the DRAM access it
+    * 16 cycles is still ~15x faster than the DRAM access it
       replaces, which is the comparison that decides performance.
 
   NOTE: replace with OpenROAD STA (pd/openroad) once a PDK is

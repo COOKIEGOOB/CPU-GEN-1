@@ -48,18 +48,18 @@ module vc3d_slice_pipeline #(
     input  wire [3:0]         req_qos,
 
     // ---- response --------------------------------------------------------------
-    output reg                rsp_valid,
+    output wire                rsp_valid,
     input  wire               rsp_ready,
-    output reg  [ID_W-1:0]    rsp_id,
-    output reg  [511:0]       rsp_data,
-    output reg                rsp_hit,
-    output reg                rsp_ce,
-    output reg                rsp_ue,
-    output reg                rsp_poison,
+    output wire [ID_W-1:0]    rsp_id,
+    output wire [511:0]       rsp_data,
+    output wire               rsp_hit,
+    output wire               rsp_ce,
+    output wire               rsp_ue,
+    output wire               rsp_poison,
 
     // ---- speculative/parallel-ECC data return ---------------------------------
-    output reg                rsp_spec,
-    output reg                rsp_parity_ok,
+    output wire               rsp_spec,
+    output wire               rsp_parity_ok,
     output reg                replay_valid,
     output reg  [ID_W-1:0]    replay_id,
     output reg  [47:0]        replay_addr,
@@ -427,64 +427,70 @@ module vc3d_slice_pipeline #(
         end
     end
 
+    // Internal registered version of the response outputs.  The fast
+    // (zero-syndrome) speculative path is a COMBINATIONAL pulse at the S5
+    // boundary, which is what removes the final response-register cycle and
+    // brings the stacked adder from +5 to +4 base cycles.  The rare
+    // error/ECC path is still registered and drives these registers.
+    reg              rsp_valid_r;
+    reg [ID_W-1:0]   rsp_id_r;
+    reg [511:0]      rsp_data_r;
+    reg              rsp_hit_r;
+    reg              rsp_ce_r;
+    reg              rsp_ue_r;
+    reg              rsp_poison_r;
+    reg              rsp_spec_r;
+    reg              rsp_parity_ok_r;
+
     reg fast_rsp_sent;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            rsp_valid          <= 1'b0;
-            rsp_id             <= {ID_W{1'b0}};
-            rsp_data           <= 512'd0;
-            rsp_hit            <= 1'b0;
-            rsp_ce             <= 1'b0;
-            rsp_ue             <= 1'b0;
-            rsp_poison         <= 1'b0;
-            rsp_spec           <= 1'b0;
-            rsp_parity_ok      <= 1'b0;
-            replay_valid       <= 1'b0;
-            replay_id          <= {ID_W{1'b0}};
-            replay_addr        <= 48'd0;
-            replay_data        <= 512'd0;
-            replay_ce          <= 1'b0;
-            replay_ue          <= 1'b0;
-            replay_poison      <= 1'b0;
-            mnt_rsp_valid      <= 1'b0;
-            mnt_rdata          <= 512'd0;
-            mnt_rsp_ce         <= 1'b0;
-            mnt_rsp_ue         <= 1'b0;
-            mnt_rsp_syndrome   <= 36'd0;
+            rsp_valid_r       <= 1'b0;
+            rsp_id_r          <= {ID_W{1'b0}};
+            rsp_data_r        <= 512'd0;
+            rsp_hit_r         <= 1'b0;
+            rsp_ce_r          <= 1'b0;
+            rsp_ue_r          <= 1'b0;
+            rsp_poison_r      <= 1'b0;
+            rsp_spec_r        <= 1'b0;
+            rsp_parity_ok_r   <= 1'b0;
+            replay_valid      <= 1'b0;
+            replay_id         <= {ID_W{1'b0}};
+            replay_addr       <= 48'd0;
+            replay_data       <= 512'd0;
+            replay_ce         <= 1'b0;
+            replay_ue         <= 1'b0;
+            replay_poison     <= 1'b0;
+            mnt_rsp_valid     <= 1'b0;
+            mnt_rdata         <= 512'd0;
+            mnt_rsp_ce        <= 1'b0;
+            mnt_rsp_ue        <= 1'b0;
+            mnt_rsp_syndrome  <= 36'd0;
             mnt_rsp_line_valid <= 1'b0;
-            err_push           <= 1'b0;
-            err_class          <= `VC3D_ERR_NONE;
-            err_src            <= `VC3D_ERRSRC_BASE_DATA;
-            err_addr           <= 48'd0;
-            err_way            <= 4'd0;
-            err_syndrome       <= 36'd0;
-            err_dirty          <= 1'b0;
-            fast_rsp_sent      <= 1'b0;
+            err_push          <= 1'b0;
+            err_class         <= `VC3D_ERR_NONE;
+            err_src           <= `VC3D_ERRSRC_BASE_DATA;
+            err_addr          <= 48'd0;
+            err_way           <= 4'd0;
+            err_syndrome      <= 36'd0;
+            err_dirty         <= 1'b0;
+            fast_rsp_sent     <= 1'b0;
         end
         else begin
-            rsp_valid     <= 1'b0;
-            rsp_spec      <= 1'b0;
-            rsp_parity_ok <= 1'b0;
-            replay_valid  <= 1'b0;
-            mnt_rsp_valid <= 1'b0;
-            err_push      <= 1'b0;
+            rsp_valid_r       <= 1'b0;
+            rsp_spec_r        <= 1'b0;
+            rsp_parity_ok_r   <= 1'b0;
+            replay_valid      <= 1'b0;
+            mnt_rsp_valid     <= 1'b0;
+            err_push          <= 1'b0;
 
             // ---------- speculative S6 return ---------------------------------
             // Raw data + a 1-cycle syndrome/parity flag.  Only the (overwhelming)
             // zero-syndrome case takes this path; anything else waits for the
             // full parallel SECDED corrector and triggers a replay below.
             if (s5_valid && !s5_is_mnt && s5_fast_ok && !fast_rsp_sent) begin
-                rsp_valid      <= 1'b1;
-                rsp_spec       <= 1'b1;
-                rsp_parity_ok  <= 1'b1;
-                rsp_id         <= s5_id;
-                rsp_data       <= s5_raw_line;
-                rsp_hit        <= s5_hit;
-                rsp_ce         <= 1'b0;
-                rsp_ue         <= 1'b0;
-                rsp_poison     <= 1'b0;
-                fast_rsp_sent  <= 1'b1;
+                fast_rsp_sent <= 1'b1;
             end
 
             // ---------- full parallel-SECDED path (only on non-zero syndrome) --
@@ -514,13 +520,13 @@ module vc3d_slice_pipeline #(
                     end
                 end
                 else begin
-                    rsp_valid  <= 1'b1;
-                    rsp_id     <= s5_id;
-                    rsp_data   <= dec_line;
-                    rsp_hit    <= s5_hit;
-                    rsp_ce     <= dec_ce;
-                    rsp_ue     <= dec_ue;
-                    rsp_poison <= dec_poison;
+                    rsp_valid_r       <= 1'b1;
+                    rsp_id_r          <= s5_id;
+                    rsp_data_r        <= dec_line;
+                    rsp_hit_r         <= s5_hit;
+                    rsp_ce_r          <= dec_ce;
+                    rsp_ue_r          <= dec_ue;
+                    rsp_poison_r      <= dec_poison;
                 end
 
                 if (dec_ce || dec_ue || s5_link_err) begin
@@ -538,6 +544,24 @@ module vc3d_slice_pipeline #(
             end
         end
     end
+
+    // -------------------------------------------------------------------------
+    // Fast (common-case) speculative response, combinational at the S5 data
+    // boundary.  This is the +4-cycle path: the array data returns with the
+    // answer and no extra response-register cycle.  The registered path still
+    // wins when the fast path is not taken (non-zero syndrome / ECC).
+    // -------------------------------------------------------------------------
+    wire fast_rsp_valid = s5_valid && !s5_is_mnt && s5_fast_ok && !fast_rsp_sent;
+
+    assign rsp_valid      = fast_rsp_valid ? 1'b1               : rsp_valid_r;
+    assign rsp_id         = fast_rsp_valid ? s5_id              : rsp_id_r;
+    assign rsp_data       = fast_rsp_valid ? s5_raw_line        : rsp_data_r;
+    assign rsp_hit        = fast_rsp_valid ? s5_hit             : rsp_hit_r;
+    assign rsp_ce         = fast_rsp_valid ? 1'b0               : rsp_ce_r;
+    assign rsp_ue         = fast_rsp_valid ? 1'b0               : rsp_ue_r;
+    assign rsp_poison     = fast_rsp_valid ? 1'b0               : rsp_poison_r;
+    assign rsp_spec       = fast_rsp_valid ? 1'b1               : rsp_spec_r;
+    assign rsp_parity_ok  = fast_rsp_valid ? 1'b1               : rsp_parity_ok_r;
 
     // -------------------------------------------------------------------------
     // Miss / fill handling

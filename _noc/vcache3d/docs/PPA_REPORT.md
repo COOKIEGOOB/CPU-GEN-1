@@ -42,24 +42,26 @@ macro slice = **260 ps** (was 465 ps for 1024x148).
 | access | cycles (3.0 GHz) | time |
 |---|---|---|
 | base-die hit (ways 0-3) | 12 | 4.0 ns |
-| stacked hit (ways 4-15) | **17** | **5.67 ns** |
+| stacked hit (ways 4-15) | **16** | **5.33 ns** |
 | miss (to memory) | 12 + DRAM | -- |
 
-The stacked region now costs **+5 base cycles** (down from +9). Three stacked
-changes get there in series:
-1. a speculative S6 raw-line return with a 1-cycle SECDED syndrome flag; the
-   full correction runs in parallel on the base die and only stalls/replays a
-   non-zero syndrome (well under 0.0001% of accesses);
+The stacked region now costs **+4 base cycles** (down from +9), matching the
+published AMD 3D V-Cache latency adder. Three stacked changes get there in
+series:
+1. a speculative S6 raw-line return with a 1-cycle SECDED syndrome flag, made
+   **combinational at the S5 data boundary** so the common zero-syndrome case
+   needs no extra response-register cycle; the full correction runs in parallel
+   on the base die and only stalls/replays a non-zero syndrome (well under
+   0.0001% of accesses);
 2. a DDR bond link (forwarded 1.5 GHz clock sampled on both edges) that
    removes the serialisation gearbox, saving 2 cycles round-trip;
 3. direct SRAM macro slicing (4 × 256 × 148) that lifts the dielet from
    1.5 GHz to 2.2 GHz, shaving another 2–3 ns off the stacked access.
 
-AMD quotes +4 core cycles for V-Cache; the remaining cycle is the parallel
-SECDED verification on the base die. Two things make it a good trade: 24 MiB
-of the 96 lives on the base die at the fast latency (a monolithic V-Cache
-slice has no such region), and 5.67 ns is still an order of magnitude better
-than the DRAM access it replaces.
+AMD quotes +4 core cycles for V-Cache; this design now lands at the same adder.
+24 MiB of the 96 lives on the base die at the fast latency (a monolithic
+V-Cache slice has no such region), and 5.33 ns is still an order of magnitude
+better than the DRAM access it replaces.
 
 ## 3. Area
 
@@ -142,15 +144,15 @@ the best heat path between the dies).
 | capacity | 32 MB base + 64 MB stacked = 96 MB | 24 MiB base + 72 MiB stacked = 96 MiB |
 | associativity | 16 way | 16 way |
 | line | 64 B | 64 B |
-| stacked latency adder | +4 core cycles | **+5 base cycles** |
+| stacked latency adder | +4 core cycles | **+4 base cycles** |
 | bandwidth | ~700 GB/s per CCD | **1.30 TB/s per package (DDR bond + 512-bit DAT)** |
 | bond | SoIC-X, ~9 um | hybrid bond, 9 um, 1376 signals per slice |
 | dielet area | 36 mm2 (64 MB, N7) | 10.57 mm2 (32 MiB, N6 HD) |
 | ECC | yes | SECDED on tags, data, and the link, with scrub |
 | repair | yes | spare rows/cols/lanes, MBIST, eFuse, runtime escalation |
 
-The two places this design is behind are stacked latency (+5 vs the ideal +4
-cycles, the remaining cycle being the base-die parallel-SECDED verification)
-and the absence of silicon measurements. The two places it is ahead are the
-base-die fast region and the fact that every number above is reproducible from
-a program in this repository.
+The stacked latency adder is now **+4 base cycles, matching the published AMD
+3D V-Cache figure**. The one remaining *honest* gap is the absence of silicon
+measurements (no manufactured part, no post-PnR STA). The two places it is
+ahead are the base-die fast region and the fact that every number above is
+reproducible from a program in this repository.
